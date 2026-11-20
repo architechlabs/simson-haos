@@ -58,6 +58,37 @@ The connection asks for four scopes and shows them on the consent screen:
 
 Home Assistant acts as you: it can never do more than your Simson role allows.
 
+## Build your own: the call layer
+
+The calling experience does not live in a card. A small runtime is loaded on every
+Home Assistant page, so a call rings, can be ended and shows its state on whatever
+dashboard, panel or custom page you are looking at. Cards, scripts and your own
+dashboards only trigger it.
+
+```js
+window.simson.call("1201", "1202");                 // place a call
+window.simson.call("1201", "1202", { video: true }); // video call
+window.simson.hangup(callId);
+window.simson.on("incoming", (call) => console.log(call));  // also: answered, ended, missed
+window.simson.configure({ overlay: false });        // hide the built-in overlay, keep the events
+window.simson.mount(element);                       // render the live-call view anywhere
+window.simson.registerTransport(myTransport);       // plug in browser audio and video
+```
+
+The same events are DOM events on `window` (`simson:incoming`, `simson:answered`,
+`simson:ended`, `simson:missed`, `simson:media`) and Home Assistant bus events
+(`simson_call_event`), so a button-card, a script or an automation can react without
+any JavaScript.
+
+**Microphone and camera.** When a call is placed through a transport that uses the
+browser for audio, the browser asks for the microphone (and the camera for a video
+call) at the same moment the call is placed, in parallel with setting it up. Nothing
+waits for the connection first. The default transport rings the two phones and
+connects them, so it needs no browser audio and asks for nothing.
+
+**Cards.** `simson-card` (everything), `simson-dialer-card`, `simson-phones-card`,
+`simson-live-call-card` and `simson-add-phone-card`. Each can be placed alone.
+
 ## Why the card no longer shows "Configuration error"
 
 `simson-card.js` is a tiny file that defines the card elements the instant it runs,

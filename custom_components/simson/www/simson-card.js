@@ -1,16 +1,45 @@
-// Simson card: tiny entry point.
+// Simson: tiny entry point, loaded on every Home Assistant page.
 //
-// This file defines the custom elements the moment it runs, so Home Assistant
-// never renders "Configuration error" while the card downloads. Everything heavy
-// lives in simson-card-core.js, which starts downloading in parallel right away
-// and is swapped in as soon as it is ready. Keep this file small and dependency
-// free.
+// It does three things and nothing else:
+//  1. defines every card element immediately, so Home Assistant never renders
+//     "Configuration error" while a card downloads;
+//  2. installs window.simson, the call API for scripts and custom dashboards;
+//  3. starts downloading the card interface and the call runtime in parallel.
+// Everything heavy lives in simson-card-core.js (cards) and simson-runtime.js
+// (global call layer). Keep this file small and dependency free.
 const VERSION = "0.1.0";
-const CORE = new URL(`./simson-card-core.js?v=${VERSION}`, import.meta.url).href;
+const base = (name) => new URL(`./${name}?v=${VERSION}`, import.meta.url).href;
+const retrying = (name) => {
+  let promise;
+  return () => (promise ||= import(base(name)).catch((error) => { promise = null; throw error; }));
+};
+const loadCore = retrying("simson-card-core.js");
+const loadRuntime = retrying("simson-runtime.js");
 
-let corePromise;
-const loadCore = () => (corePromise ||= import(CORE).catch((error) => { corePromise = null; throw error; }));
+// ---- window.simson -----------------------------------------------------------
+if (!window.simson) {
+  let manager = null;
+  const ready = loadRuntime().then((runtime) => (manager = runtime.manager));
+  const api = {
+    version: VERSION,
+    ready,
+    // Subscribe to simson:incoming, simson:answered, simson:ended, simson:missed.
+    on(type, handler) {
+      const listener = (event) => handler(event.detail);
+      window.addEventListener(`simson:${type}`, listener);
+      return () => window.removeEventListener(`simson:${type}`, listener);
+    },
+    get calls() { return manager ? manager.liveCalls : []; },
+    get settings() { return manager ? manager.settings : null; },
+  };
+  for (const name of ["call", "hangup", "answer", "decline", "configure", "mount", "registerTransport", "prepareMedia", "openDialer"]) {
+    // Call straight through once loaded so a click keeps its user gesture.
+    api[name] = (...args) => (manager ? manager[name](...args) : ready.then((m) => m[name](...args)));
+  }
+  window.simson = api;
+}
 
+// ---- cards ---------------------------------------------------------------------
 class SimsonCard extends HTMLElement {
   constructor() {
     super();
@@ -23,7 +52,7 @@ class SimsonCard extends HTMLElement {
 
   // Never throws: an empty config is valid because the card discovers its entities.
   setConfig(config) {
-    this._config = { ...(config || {}) };
+    this._config = { view: this.constructor.defaultView, ...(config || {}) };
     if (this._impl) this._impl.setConfig(this._config);
   }
 
@@ -34,13 +63,12 @@ class SimsonCard extends HTMLElement {
 
   connectedCallback() {
     if (this._impl) return;
+    if (!this._config.view) this._config = { view: this.constructor.defaultView, ...this._config };
     this._status("Opening Simson…");
     this._mount();
   }
 
-  disconnectedCallback() {
-    clearTimeout(this._timer);
-  }
+  disconnectedCallback() { clearTimeout(this._timer); }
 
   async _mount() {
     try {
@@ -75,13 +103,27 @@ class SimsonCard extends HTMLElement {
   static getStubConfig() { return { type: "custom:simson-card" }; }
 }
 
-for (const name of ["simson-card", "simson-relay-card"]) {
-  if (!customElements.get(name)) customElements.define(name, class extends SimsonCard {});
-}
+// One card for everything, plus focused cards that can be placed anywhere.
+const CARDS = [
+  ["simson-card", "combined", "Simson", "Dial, see who is online, hang up and add phones."],
+  ["simson-relay-card", "combined", "Simson (compatibility)", "Same as the Simson card."],
+  ["simson-dialer-card", "dialer", "Simson dialer", "Just the dialer."],
+  ["simson-phones-card", "phones", "Simson phones", "Who is online; tap a phone to call it."],
+  ["simson-live-call-card", "live", "Simson live call", "The call in progress, with its controls, wherever you want it."],
+  ["simson-add-phone-card", "add", "Simson add phone", "Create a phone and see its settings once."],
+];
 window.customCards = window.customCards || [];
-if (!window.customCards.some((card) => card.type === "simson-card")) {
-  window.customCards.push({ type: "simson-card", name: "Simson", description: "Call between phones, see who is online, add phones.", preview: false });
+for (const [name, view, title, description] of CARDS) {
+  if (!customElements.get(name)) {
+    customElements.define(name, class extends SimsonCard {
+      static defaultView = view;
+      static getStubConfig() { return { type: `custom:${name}`, view }; }
+    });
+  }
+  if (name !== "simson-relay-card" && !window.customCards.some((card) => card.type === name)) {
+    window.customCards.push({ type: name, name: title, description, preview: false });
+  }
 }
 
-// Begin loading the real card now; do not wait for a dashboard to ask for it.
+// Start loading the interface and the call runtime now; nothing waits for a dashboard.
 loadCore().catch(() => {});
