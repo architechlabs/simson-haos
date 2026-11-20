@@ -1,0 +1,52 @@
+blueprint:
+  name: Notify on incoming Simson call
+  description: >-
+    Sends a push notification to a phone running the Home Assistant app when a
+    call starts ringing at a Simson location, and another when a call is missed.
+  domain: automation
+  input:
+    calls_event:
+      name: Simson calls event entity
+      selector:
+        entity:
+          filter:
+            - integration: simson
+              domain: event
+    notify_service:
+      name: Notification service
+      description: For example notify.mobile_app_pixel
+      selector:
+        text:
+    notify_missed:
+      name: Also notify about missed calls
+      default: true
+      selector:
+        boolean:
+triggers:
+  - trigger: state
+    entity_id: !input calls_event
+mode: queued
+actions:
+  - variables:
+      kind: "{{ trigger.to_state.attributes.event_type | default('') }}"
+      notify_missed: !input notify_missed
+  - choose:
+      - conditions: "{{ kind == 'incoming' }}"
+        sequence:
+          - action: !input notify_service
+            data:
+              title: Incoming call
+              message: A call is ringing at your Simson location.
+              data:
+                tag: simson_call
+                importance: high
+                ttl: 0
+                priority: high
+      - conditions: "{{ kind == 'missed' and notify_missed }}"
+        sequence:
+          - action: !input notify_service
+            data:
+              title: Missed call
+              message: You missed a call at your Simson location.
+              data:
+                tag: simson_call

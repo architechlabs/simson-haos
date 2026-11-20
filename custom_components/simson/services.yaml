@@ -1,0 +1,83 @@
+call:
+  fields:
+    from_extension:
+      required: true
+      example: "1201"
+      selector:
+        text:
+    to_extension:
+      required: true
+      example: "1202"
+      selector:
+        text:
+    video:
+      default: false
+      selector:
+        boolean:
+    timeout:
+      default: 30
+      selector:
+        number:
+          min: 10
+          max: 120
+          unit_of_measurement: s
+    config_entry_id:
+      selector:
+        config_entry:
+          integration: simson
+hangup:
+  fields:
+    call_id:
+      required: true
+      selector:
+        text:
+    config_entry_id:
+      selector:
+        config_entry:
+          integration: simson
+create_extension:
+  fields:
+    name:
+      required: true
+      example: Kitchen
+      selector:
+        text:
+    extension:
+      required: true
+      example: "1204"
+      selector:
+        text:
+    notify:
+      default: true
+      selector:
+        boolean:
+    config_entry_id:
+      selector:
+        config_entry:
+          integration: simson
+reset_extension_password:
+  fields:
+    extension:
+      required: true
+      example: "1204"
+      selector:
+        text:
+    notify:
+      default: true
+      selector:
+        boolean:
+    config_entry_id:
+      selector:
+        config_entry:
+          integration: simson
+delete_extension:
+  fields:
+    extension:
+      required: true
+      example: "1204"
+      selector:
+        text:
+    config_entry_id:
+      selector:
+        config_entry:
+          integration: simson

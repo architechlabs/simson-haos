@@ -1,0 +1,42 @@
+{
+  "config": {
+    "step": {
+      "pick_implementation": {"title": "Connect Simson"},
+      "workspace": {"title": "Choose a workspace", "description": "Pick the Simson workspace to connect.", "data": {"tenant_id": "Workspace"}},
+      "site": {"title": "Choose a location", "description": "Pick the location whose phones Home Assistant should manage.", "data": {"site_id": "Location"}},
+      "reauth_confirm": {"title": "Sign in to Simson again", "description": "Your Simson sign-in expired or was revoked. Sign in again to keep calls and phones working."}
+    },
+    "abort": {
+      "already_configured": "This Simson location is already connected.",
+      "cannot_connect": "Simson could not be reached. Try again in a moment.",
+      "no_workspace": "This Simson account has no workspace yet. Create one in the Simson dashboard first.",
+      "no_site": "This workspace has no location yet. Add one in the Simson dashboard first.",
+      "wrong_account": "Sign in with the same Simson account that owns this connection.",
+      "oauth_error": "Simson sign-in did not complete.",
+      "oauth_failed": "Simson sign-in failed.",
+      "oauth_timeout": "Simson sign-in took too long. Try again.",
+      "oauth_unauthorized": "Simson did not approve the sign-in.",
+      "missing_configuration": "Simson sign-in is not configured.",
+      "authorize_url_timeout": "The Simson sign-in page took too long to open.",
+      "no_url_available": "Home Assistant has no reachable address for the sign-in redirect.",
+      "reauth_successful": "Signed in again."
+    },
+    "create_entry": {"default": "Simson is connected."}
+  },
+  "entity": {
+    "binary_sensor": {"extension_online": {"name": "Registered"}},
+    "sensor": {
+      "active_calls": {"name": "Active calls"},
+      "recent_calls": {"name": "Recent calls"},
+      "voice_status": {"name": "Voice service"}
+    },
+    "event": {"calls": {"name": "Calls", "state_attributes": {"event_type": {"state": {"incoming": "Incoming", "answered": "Answered", "ended": "Ended", "missed": "Missed"}}}}}
+  },
+  "services": {
+    "call": {"name": "Call", "description": "Ring two phones and connect them.", "fields": {"from_extension": {"name": "From extension", "description": "The phone that rings first."}, "to_extension": {"name": "To extension", "description": "The phone to call."}, "video": {"name": "Video", "description": "Start a video call."}, "timeout": {"name": "Ring time", "description": "Seconds to ring before giving up."}, "config_entry_id": {"name": "Location", "description": "Only needed when several Simson locations are connected."}}},
+    "hangup": {"name": "Hang up", "description": "End a live call.", "fields": {"call_id": {"name": "Call ID", "description": "The call to end."}, "config_entry_id": {"name": "Location", "description": "Only needed when several Simson locations are connected."}}},
+    "create_extension": {"name": "Create phone", "description": "Add a SIP phone extension and get its one-time password.", "fields": {"name": {"name": "Name", "description": "What the phone is called."}, "extension": {"name": "Extension", "description": "2 to 8 digits, not starting with 0."}, "notify": {"name": "Show details", "description": "Show the phone settings and password in a notification."}, "config_entry_id": {"name": "Location", "description": "Only needed when several Simson locations are connected."}}},
+    "reset_extension_password": {"name": "Reset phone password", "description": "Create a new password for a phone. The old one stops working.", "fields": {"extension": {"name": "Extension", "description": "The phone to reset."}, "notify": {"name": "Show details", "description": "Show the new password in a notification."}, "config_entry_id": {"name": "Location", "description": "Only needed when several Simson locations are connected."}}},
+    "delete_extension": {"name": "Delete phone", "description": "Remove a phone extension.", "fields": {"extension": {"name": "Extension", "description": "The phone to remove."}, "config_entry_id": {"name": "Location", "description": "Only needed when several Simson locations are connected."}}}
+  }
+}
