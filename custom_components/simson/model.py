@@ -61,6 +61,9 @@ class CallInfo:
 class CallEvent:
     kind: str  # incoming | answered | ended | missed
     call: CallInfo
+    caller: dict[str, str] | None = None  # {"extension", "name"} when the call started in Simson
+    callee: dict[str, str] | None = None
+    seq: int | None = None  # position in the live stream, None when found by polling
 
 
 @dataclass(frozen=True)
@@ -265,3 +268,38 @@ def interval_for(workspace: Workspace, idle: int, active: int) -> int:
     """Poll quickly while a call is in progress, slowly otherwise."""
     busy = workspace.active_calls > 0 or any(call.phase in (*PHASES_RINGING, "active") for call in workspace.calls.values())
     return active if busy else idle
+
+
+LIVE_KINDS = {"ringing": "incoming", "answered": "answered", "ended": "ended", "missed": "missed"}
+_PHASE_FOR = {"incoming": "ringing", "answered": "active", "ended": "ended", "missed": "ended"}
+
+
+def _party(value: Any) -> dict[str, str] | None:
+    if not isinstance(value, dict):
+        return None
+    extension, name = value.get("extension"), value.get("name")
+    if not isinstance(extension, str) or not isinstance(name, str):
+        return None
+    return {"extension": extension, "name": name}
+
+
+def parse_live_event(data: Any) -> CallEvent | None:
+    """Turn one stream message into a call event, or None when it is not one we report."""
+    if not isinstance(data, dict):
+        return None
+    kind = LIVE_KINDS.get(str(data.get("kind")))
+    call_id, seq = data.get("call_id"), data.get("seq")
+    if kind is None or not isinstance(call_id, str) or isinstance(seq, bool) or not isinstance(seq, int):
+        return None
+    when = data.get("occurred_at") if isinstance(data.get("occurred_at"), str) else None
+    revision = data.get("revision") if isinstance(data.get("revision"), int) else 0
+    info = CallInfo(
+        id=call_id,
+        phase=_PHASE_FOR[kind],
+        revision=revision,
+        started_at=when if kind == "incoming" else None,
+        connected_at=when if kind == "answered" else None,
+        ended_at=when if kind in ("ended", "missed") else None,
+        connected_seconds=0,
+    )
+    return CallEvent(kind, info, _party(data.get("from")), _party(data.get("to")), seq)

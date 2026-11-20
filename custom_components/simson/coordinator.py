@@ -27,6 +27,7 @@ from .const import (
     SCAN_INTERVAL_IDLE,
     SLOW_REFRESH_EVERY,
 )
+from .stream import EventStreamer
 from .model import (
     Automation,
     CallEvent,
@@ -72,6 +73,32 @@ class SimsonCoordinator(DataUpdateCoordinator[Workspace]):
         self._tick = 0
         self._automations: dict[str, Automation] = {}
         self._numbers: list[CarrierNumber] = []
+        self.live = False  # True while the live event stream is connected
+        self.streamer = EventStreamer(hass, api, self.tenant_id, on_event=self._on_live, on_state=self._on_live_state, on_auth_failed=self._on_stream_auth)
+
+    # ---- live events -----------------------------------------------------
+
+    def _announce(self, event: CallEvent, source: str) -> None:
+        call = event.call
+        payload = {"event": event.kind, "call_id": call.id, "phase": call.phase, "connected_seconds": call.connected_seconds, "site_id": self.site_id, "source": source}
+        for role, party in (("caller", event.caller), ("callee", event.callee)):
+            payload[f"{role}_extension"] = party["extension"] if party else None
+            payload[f"{role}_name"] = party["name"] if party else None
+        self.hass.bus.async_fire(BUS_EVENT, payload)
+        for listener in list(self._listeners):
+            listener(event)
+
+    def _on_live(self, event: CallEvent) -> None:
+        self._announce(event, "stream")
+        # Refresh counters and the call list soon; several events in a burst share one refresh.
+        self.hass.async_create_task(self.async_request_refresh())
+
+    def _on_live_state(self, connected: bool) -> None:
+        self.live = connected
+        _LOGGER.debug("Simson live events %s", "connected" if connected else "disconnected")
+
+    def _on_stream_auth(self) -> None:
+        self.config_entry.async_start_reauth(self.hass)
 
     # ---- options ---------------------------------------------------------
 
@@ -150,10 +177,10 @@ class SimsonCoordinator(DataUpdateCoordinator[Workspace]):
             total_calls=len(calls),
             answered_calls=sum(1 for call in calls.values() if call.connected_at),
         )
+        # While the live stream is connected it reports every change; polling only fills in when it is not.
         for event in diff_calls(self._previous_calls, calls):
-            self.hass.bus.async_fire(BUS_EVENT, {"event": event.kind, "call_id": event.call.id, "phase": event.call.phase, "connected_seconds": event.call.connected_seconds, "site_id": self.site_id})
-            for listener in list(self._listeners):
-                listener(event)
+            if not self.live:
+                self._announce(event, "poll")
         for changed, change in diff_presence(self._previous_extensions, extensions):
             self.hass.bus.async_fire(BUS_EXTENSION_EVENT, {"change": change, "extension": changed.extension, "name": changed.name, "endpoint_id": changed.id, "site_id": self.site_id})
         self._previous_calls = calls

@@ -104,3 +104,27 @@ python -m pytest
 The API client, the one-time credential decryption (tested against a credential
 sealed by the Simson server) and the call-event logic are independent of Home
 Assistant and covered by tests. The card is checked in a real browser.
+
+## Live events
+
+Incoming, answered, ended and missed calls arrive the moment they happen over a
+private event stream, not on the next refresh. Each one fires the `simson_call_event`
+bus event and the **Calls** event entity, now with who is calling:
+
+```yaml
+trigger:
+  - platform: event
+    event_type: simson_call_event
+    event_data: {event: incoming}
+action:
+  - service: notify.notify
+    data:
+      message: "{{ trigger.event.data.caller_name or 'Someone' }} is calling {{ trigger.event.data.callee_name or 'a phone' }}"
+```
+
+`caller_*` and `callee_*` are filled for calls started from Simson. Calls that
+come from outside carry `null` for both. If the stream drops, the integration
+reconnects on its own and resumes where it stopped, so no call is missed or
+repeated. While it is down, normal refreshing still reports calls. Connections
+made before this feature need **Reconfigure / sign in again** once to grant
+the new "live call events" permission.

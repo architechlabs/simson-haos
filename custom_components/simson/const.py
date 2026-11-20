@@ -17,6 +17,7 @@ SCOPES = (
     "calls.read",
     "calls.control",
     "automations.run",
+    "events.read",
 )
 
 CONF_TENANT_ID = "tenant_id"

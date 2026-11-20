@@ -34,5 +34,9 @@ class SimsonCallEvents(EventEntity):
     @callback
     def _handle(self, event: CallEvent) -> None:
         call = event.call
-        self._trigger_event(event.kind, {"call_id": call.id, "phase": call.phase, "started_at": call.started_at, "connected_at": call.connected_at, "ended_at": call.ended_at, "connected_seconds": call.connected_seconds})
+        self._trigger_event(event.kind, {
+            "call_id": call.id, "phase": call.phase, "started_at": call.started_at, "connected_at": call.connected_at, "ended_at": call.ended_at, "connected_seconds": call.connected_seconds,
+            "caller_extension": event.caller["extension"] if event.caller else None, "caller_name": event.caller["name"] if event.caller else None,
+            "callee_extension": event.callee["extension"] if event.callee else None, "callee_name": event.callee["name"] if event.callee else None,
+        })
         self.async_write_ha_state()

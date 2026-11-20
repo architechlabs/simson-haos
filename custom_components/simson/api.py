@@ -17,6 +17,7 @@ from typing import Any
 import aiohttp
 
 from .credential import OneTimeKey, credential_context
+from .sse import SseError, parse_sse
 
 TokenProvider = Callable[[], Awaitable[str]]
 
@@ -58,6 +59,8 @@ class SimsonApiError(SimsonError):
 
 
 _TIMEOUT = aiohttp.ClientTimeout(total=15, connect=6)
+# A stream stays open: only a silent connection is an error (the server sends a keep-alive every 15 s).
+_STREAM_TIMEOUT = aiohttp.ClientTimeout(total=None, connect=10, sock_read=45)
 
 
 class SimsonApi:
@@ -102,6 +105,29 @@ class SimsonApi:
                 return payload
         except (aiohttp.ClientError, asyncio.TimeoutError) as error:
             raise SimsonConnectionError("Simson could not be reached.") from error
+
+    async def events(self, tenant: str, last_event_id: str | None = None):
+        """Yield live call messages until the stream closes. Raises on any failure."""
+        headers = {"Authorization": f"Bearer {await self._token()}", "Accept": "text/event-stream"}
+        if last_event_id:
+            headers["Last-Event-ID"] = last_event_id
+        try:
+            async with self._session.get(self._base + f"/v1/tenants/{tenant}/events", headers=headers, timeout=_STREAM_TIMEOUT, allow_redirects=False) as response:
+                status = response.status
+                if status == 401:
+                    raise SimsonAuthError("Simson rejected the access token.")
+                if status == 403:
+                    raise SimsonPermissionError("This connection may not receive live events.")
+                if status == 404:
+                    raise SimsonNotFound("This Simson server has no live event stream.")
+                if status == 429:
+                    raise SimsonRateLimited("Too many open event streams.")
+                if status != 200:
+                    raise SimsonConnectionError(f"The event stream is unavailable (HTTP {status}).")
+                async for message in parse_sse(response.content.iter_any()):
+                    yield message
+        except (aiohttp.ClientError, asyncio.TimeoutError, SseError) as error:
+            raise SimsonConnectionError("The Simson event stream was interrupted.") from error
 
     # ---- reading ----------------------------------------------------------
 

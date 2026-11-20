@@ -50,6 +50,8 @@ async def async_setup_entry(hass: HomeAssistant, entry: SimsonConfigEntry) -> bo
     await coordinator.async_config_entry_first_refresh()
     entry.runtime_data = SimsonRuntime(coordinator=coordinator, api=api)
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
+    coordinator.streamer.start()
+    entry.async_on_unload(coordinator.streamer.stop)
     return True
 
 
