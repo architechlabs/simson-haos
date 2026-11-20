@@ -20,7 +20,7 @@ from .services import async_register_services
 
 _LOGGER = logging.getLogger(__name__)
 
-PLATFORMS = ["binary_sensor", "sensor", "event"]
+PLATFORMS = ["binary_sensor", "sensor", "event", "switch", "button", "select"]
 
 
 async def async_setup(hass: HomeAssistant, config: ConfigType) -> bool:

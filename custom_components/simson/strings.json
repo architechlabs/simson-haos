@@ -1,10 +1,27 @@
 {
   "config": {
     "step": {
-      "pick_implementation": {"title": "Connect Simson"},
-      "workspace": {"title": "Choose a workspace", "description": "Pick the Simson workspace to connect.", "data": {"tenant_id": "Workspace"}},
-      "site": {"title": "Choose a location", "description": "Pick the location whose phones Home Assistant should manage.", "data": {"site_id": "Location"}},
-      "reauth_confirm": {"title": "Sign in to Simson again", "description": "Your Simson sign-in expired or was revoked. Sign in again to keep calls and phones working."}
+      "pick_implementation": {
+        "title": "Connect Simson"
+      },
+      "workspace": {
+        "title": "Choose a workspace",
+        "description": "Pick the Simson workspace to connect.",
+        "data": {
+          "tenant_id": "Workspace"
+        }
+      },
+      "site": {
+        "title": "Choose a location",
+        "description": "Pick the location whose phones Home Assistant should manage.",
+        "data": {
+          "site_id": "Location"
+        }
+      },
+      "reauth_confirm": {
+        "title": "Sign in to Simson again",
+        "description": "Your Simson sign-in expired or was revoked. Sign in again to keep calls and phones working."
+      }
     },
     "abort": {
       "already_configured": "This Simson location is already connected.",
@@ -21,22 +38,270 @@
       "no_url_available": "Home Assistant has no reachable address for the sign-in redirect.",
       "reauth_successful": "Signed in again."
     },
-    "create_entry": {"default": "Simson is connected."}
+    "create_entry": {
+      "default": "Simson is connected."
+    }
   },
   "entity": {
-    "binary_sensor": {"extension_online": {"name": "Registered"}},
-    "sensor": {
-      "active_calls": {"name": "Active calls"},
-      "recent_calls": {"name": "Recent calls"},
-      "voice_status": {"name": "Voice service"}
+    "binary_sensor": {
+      "extension_online": {
+        "name": "Registered"
+      }
     },
-    "event": {"calls": {"name": "Calls", "state_attributes": {"event_type": {"state": {"incoming": "Incoming", "answered": "Answered", "ended": "Ended", "missed": "Missed"}}}}}
+    "sensor": {
+      "active_calls": {
+        "name": "Active calls"
+      },
+      "recent_calls": {
+        "name": "Recent calls"
+      },
+      "voice_status": {
+        "name": "Voice service"
+      }
+    },
+    "event": {
+      "calls": {
+        "name": "Calls",
+        "state_attributes": {
+          "event_type": {
+            "state": {
+              "incoming": "Incoming",
+              "answered": "Answered",
+              "ended": "Ended",
+              "missed": "Missed"
+            }
+          }
+        }
+      }
+    },
+    "switch": {
+      "extension_enabled": {
+        "name": "Enabled"
+      }
+    },
+    "button": {
+      "call_extension": {
+        "name": "Call"
+      },
+      "run_preset": {
+        "name": "Run call preset"
+      }
+    },
+    "select": {
+      "default_phone": {
+        "name": "Default calling phone"
+      }
+    }
   },
   "services": {
-    "call": {"name": "Call", "description": "Ring two phones and connect them.", "fields": {"from_extension": {"name": "From extension", "description": "The phone that rings first."}, "to_extension": {"name": "To extension", "description": "The phone to call."}, "video": {"name": "Video", "description": "Start a video call."}, "timeout": {"name": "Ring time", "description": "Seconds to ring before giving up."}, "config_entry_id": {"name": "Location", "description": "Only needed when several Simson locations are connected."}}},
-    "hangup": {"name": "Hang up", "description": "End a live call.", "fields": {"call_id": {"name": "Call ID", "description": "The call to end."}, "config_entry_id": {"name": "Location", "description": "Only needed when several Simson locations are connected."}}},
-    "create_extension": {"name": "Create phone", "description": "Add a SIP phone extension and get its one-time password.", "fields": {"name": {"name": "Name", "description": "What the phone is called."}, "extension": {"name": "Extension", "description": "2 to 8 digits, not starting with 0."}, "notify": {"name": "Show details", "description": "Show the phone settings and password in a notification."}, "config_entry_id": {"name": "Location", "description": "Only needed when several Simson locations are connected."}}},
-    "reset_extension_password": {"name": "Reset phone password", "description": "Create a new password for a phone. The old one stops working.", "fields": {"extension": {"name": "Extension", "description": "The phone to reset."}, "notify": {"name": "Show details", "description": "Show the new password in a notification."}, "config_entry_id": {"name": "Location", "description": "Only needed when several Simson locations are connected."}}},
-    "delete_extension": {"name": "Delete phone", "description": "Remove a phone extension.", "fields": {"extension": {"name": "Extension", "description": "The phone to remove."}, "config_entry_id": {"name": "Location", "description": "Only needed when several Simson locations are connected."}}}
+    "call": {
+      "name": "Call",
+      "description": "Ring two phones and connect them.",
+      "fields": {
+        "from_extension": {
+          "name": "From extension",
+          "description": "The phone that rings first."
+        },
+        "to_extension": {
+          "name": "To extension",
+          "description": "The phone to call."
+        },
+        "video": {
+          "name": "Video",
+          "description": "Start a video call."
+        },
+        "timeout": {
+          "name": "Ring time",
+          "description": "Seconds to ring before giving up."
+        },
+        "config_entry_id": {
+          "name": "Location",
+          "description": "Only needed when several Simson locations are connected."
+        }
+      }
+    },
+    "hangup": {
+      "name": "Hang up",
+      "description": "End a live call.",
+      "fields": {
+        "call_id": {
+          "name": "Call ID",
+          "description": "The call to end."
+        },
+        "config_entry_id": {
+          "name": "Location",
+          "description": "Only needed when several Simson locations are connected."
+        }
+      }
+    },
+    "create_extension": {
+      "name": "Create phone",
+      "description": "Add a SIP phone extension and get its one-time password.",
+      "fields": {
+        "name": {
+          "name": "Name",
+          "description": "What the phone is called."
+        },
+        "extension": {
+          "name": "Extension",
+          "description": "2 to 8 digits, not starting with 0."
+        },
+        "notify": {
+          "name": "Show details",
+          "description": "Show the phone settings and password in a notification."
+        },
+        "config_entry_id": {
+          "name": "Location",
+          "description": "Only needed when several Simson locations are connected."
+        }
+      }
+    },
+    "reset_extension_password": {
+      "name": "Reset phone password",
+      "description": "Create a new password for a phone. The old one stops working.",
+      "fields": {
+        "extension": {
+          "name": "Extension",
+          "description": "The phone to reset."
+        },
+        "notify": {
+          "name": "Show details",
+          "description": "Show the new password in a notification."
+        },
+        "config_entry_id": {
+          "name": "Location",
+          "description": "Only needed when several Simson locations are connected."
+        }
+      }
+    },
+    "delete_extension": {
+      "name": "Delete phone",
+      "description": "Remove a phone extension.",
+      "fields": {
+        "extension": {
+          "name": "Extension",
+          "description": "The phone to remove."
+        },
+        "config_entry_id": {
+          "name": "Location",
+          "description": "Only needed when several Simson locations are connected."
+        }
+      }
+    },
+    "call_extension": {
+      "name": "Call a phone",
+      "description": "Rings the default calling phone, then the phone you name. Pick a different caller with From extension.",
+      "fields": {
+        "to_extension": {
+          "name": "Call",
+          "description": "Extension number to reach."
+        },
+        "from_extension": {
+          "name": "From extension",
+          "description": "Leave empty to use the default calling phone."
+        },
+        "video": {
+          "name": "Video",
+          "description": "Ask phones that support it for a video call."
+        },
+        "timeout": {
+          "name": "Ring time",
+          "description": "Seconds to ring before giving up."
+        },
+        "config_entry_id": {
+          "name": "Location",
+          "description": "Only needed when more than one Simson location is set up."
+        }
+      }
+    },
+    "run_call_preset": {
+      "name": "Run a call preset",
+      "description": "Runs a saved call preset, such as ringing the kitchen when the doorbell is pressed.",
+      "fields": {
+        "preset": {
+          "name": "Preset",
+          "description": "Preset name or id."
+        },
+        "config_entry_id": {
+          "name": "Location",
+          "description": "Only needed when more than one Simson location is set up."
+        }
+      }
+    },
+    "get_call_history": {
+      "name": "Get call history",
+      "description": "Returns recent calls so an automation can read them.",
+      "fields": {
+        "limit": {
+          "name": "Number of calls",
+          "description": "How many recent calls to return."
+        },
+        "config_entry_id": {
+          "name": "Location",
+          "description": "Only needed when more than one Simson location is set up."
+        }
+      }
+    },
+    "get_extensions": {
+      "name": "Get phones",
+      "description": "Returns every phone with its online state.",
+      "fields": {
+        "config_entry_id": {
+          "name": "Location",
+          "description": "Only needed when more than one Simson location is set up."
+        }
+      }
+    },
+    "get_numbers": {
+      "name": "Get carrier numbers",
+      "description": "Returns the phone numbers of this workspace.",
+      "fields": {
+        "config_entry_id": {
+          "name": "Location",
+          "description": "Only needed when more than one Simson location is set up."
+        }
+      }
+    },
+    "get_call_presets": {
+      "name": "Get call presets",
+      "description": "Returns the saved call presets.",
+      "fields": {
+        "config_entry_id": {
+          "name": "Location",
+          "description": "Only needed when more than one Simson location is set up."
+        }
+      }
+    },
+    "set_extension_enabled": {
+      "name": "Turn a phone on or off",
+      "description": "Enables or disables a phone. A disabled phone cannot register or call.",
+      "fields": {
+        "extension": {
+          "name": "Extension",
+          "description": "Extension number or phone name."
+        },
+        "enabled": {
+          "name": "Enabled",
+          "description": "On lets the phone register and call."
+        },
+        "config_entry_id": {
+          "name": "Location",
+          "description": "Only needed when more than one Simson location is set up."
+        }
+      }
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "Simson options",
+        "description": "Tune how Home Assistant works with Simson. Faster polling shows calls sooner but asks Simson more often.",
+        "data": {
+          "default_extension": "Default calling phone (extension number)",
+          "scan_interval_idle": "Refresh every (seconds) when idle",
+          "scan_interval_active": "Refresh every (seconds) during a call"
+        }
+      }
+    }
   }
 }

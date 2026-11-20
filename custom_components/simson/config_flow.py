@@ -7,19 +7,36 @@ from collections.abc import Mapping
 from typing import Any
 
 import voluptuous as vol
-from homeassistant.config_entries import SOURCE_REAUTH, ConfigFlowResult
+from homeassistant.config_entries import SOURCE_REAUTH, ConfigEntry, ConfigFlowResult, OptionsFlow
+from homeassistant.core import callback
 from homeassistant.helpers import config_entry_oauth2_flow
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
 from homeassistant.helpers.selector import SelectOptionDict, SelectSelector, SelectSelectorConfig, SelectSelectorMode
 
 from .api import SimsonApi, SimsonError
-from .const import API_BASE, CONF_SITE_ID, CONF_SITE_NAME, CONF_TENANT_ID, CONF_TENANT_NAME, DOMAIN, SCOPES
+from .const import API_BASE, CONF_DEFAULT_EXTENSION, CONF_SCAN_ACTIVE, CONF_SCAN_IDLE, CONF_SITE_ID, CONF_SITE_NAME, CONF_TENANT_ID, CONF_TENANT_NAME, DOMAIN, SCOPES
 
 _LOGGER = logging.getLogger(__name__)
 
 
 def _select(options: list[tuple[str, str]]) -> SelectSelector:
     return SelectSelector(SelectSelectorConfig(options=[SelectOptionDict(value=value, label=label) for value, label in options], mode=SelectSelectorMode.LIST))
+
+
+class SimsonOptionsFlow(OptionsFlow):
+    """Default calling phone and polling speed."""
+
+    async def async_step_init(self, user_input: dict[str, Any] | None = None) -> ConfigFlowResult:
+        if user_input is not None:
+            cleaned = {key: value for key, value in user_input.items() if value not in (None, "")}
+            return self.async_create_entry(data=cleaned)
+        current = self.config_entry.options
+        schema = vol.Schema({
+            vol.Optional(CONF_DEFAULT_EXTENSION, description={"suggested_value": current.get(CONF_DEFAULT_EXTENSION)}): str,
+            vol.Optional(CONF_SCAN_IDLE, default=current.get(CONF_SCAN_IDLE, 30)): vol.All(vol.Coerce(int), vol.Range(min=10, max=600)),
+            vol.Optional(CONF_SCAN_ACTIVE, default=current.get(CONF_SCAN_ACTIVE, 4)): vol.All(vol.Coerce(int), vol.Range(min=2, max=60)),
+        })
+        return self.async_show_form(step_id="init", data_schema=schema)
 
 
 class SimsonFlowHandler(config_entry_oauth2_flow.AbstractOAuth2FlowHandler, domain=DOMAIN):
@@ -42,6 +59,11 @@ class SimsonFlowHandler(config_entry_oauth2_flow.AbstractOAuth2FlowHandler, doma
     @property
     def extra_authorize_data(self) -> dict[str, Any]:
         return {"scope": " ".join(SCOPES)}
+
+    @staticmethod
+    @callback
+    def async_get_options_flow(config_entry: ConfigEntry) -> SimsonOptionsFlow:
+        return SimsonOptionsFlow()
 
     async def async_step_reauth(self, entry_data: Mapping[str, Any]) -> ConfigFlowResult:
         return await self.async_step_reauth_confirm()

@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import asyncio
 import uuid
+from datetime import datetime, timezone
 from collections.abc import Awaitable, Callable
 from typing import Any
 
@@ -119,8 +120,18 @@ class SimsonApi:
     async def numbers(self, tenant: str, site: str) -> list[dict]:
         return (await self._request("GET", f"/v1/tenants/{tenant}/sites/{site}/numbers")).get("items", [])
 
-    async def call_dashboard(self, tenant: str) -> dict:
-        return await self._request("GET", f"/v1/tenants/{tenant}/call-dashboard")
+    async def call_dashboard(self, tenant: str, *, after: str | None = None, limit: int | None = None) -> dict:
+        query = "&".join(part for part in (f"after={after}" if after else "", f"limit={limit}" if limit else "") if part)
+        return await self._request("GET", f"/v1/tenants/{tenant}/call-dashboard" + (f"?{query}" if query else ""))
+
+    async def automations(self, tenant: str, site: str, node: str) -> dict:
+        return await self._request("GET", f"/v1/tenants/{tenant}/sites/{site}/nodes/{node}/automations")
+
+    async def run_automation(self, tenant: str, site: str, node: str, automation: str, revision: int) -> dict:
+        """Run a saved call preset now. The event id doubles as the idempotency key, so a retry never rings twice."""
+        event = str(uuid.uuid4())
+        body = {"event_id": event, "occurred_at": datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"), "expected_revision": revision}
+        return await self._request("POST", f"/v1/tenants/{tenant}/sites/{site}/nodes/{node}/automations/{automation}/trigger", body=body, key=event)
 
     # ---- extensions ---------------------------------------------------------
 

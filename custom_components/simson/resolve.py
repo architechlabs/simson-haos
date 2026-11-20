@@ -5,7 +5,7 @@ from __future__ import annotations
 import re
 from typing import Any
 
-from .model import Extension, Workspace
+from .model import Automation, Extension, Workspace
 
 EXTENSION = re.compile(r"^[1-9][0-9]{1,7}$")
 
@@ -64,3 +64,32 @@ def phone_settings(workspace: Workspace, extension: str, password: str | None = 
     if password is not None:
         result["password"] = password
     return result
+
+
+def default_caller(workspace: Workspace, preferred: str | None = None) -> str:
+    """The phone calls come from when a script does not say: the chosen one, else the first usable."""
+    usable = sorted((ext for ext in workspace.extensions.values() if ext.enabled and not ext.gateway), key=lambda ext: (len(ext.extension), ext.extension))
+    if preferred and any(ext.extension == str(preferred) for ext in usable):
+        return str(preferred)
+    if not usable:
+        raise ResolveError("There is no enabled phone to call from. Add or turn on a phone first.")
+    return usable[0].extension
+
+
+def find_automation(workspace: Workspace, wanted: str) -> Automation:
+    """Find a call preset by its id or its name (case-insensitive)."""
+    text = str(wanted).strip()
+    if text in workspace.automations:
+        return workspace.automations[text]
+    matches = [item for item in workspace.automations.values() if item.name.casefold() == text.casefold()]
+    if len(matches) == 1:
+        return matches[0]
+    if len(matches) > 1:
+        raise ResolveError(f"More than one call preset is named “{text}”. Use its id.")
+    raise ResolveError(f"There is no call preset “{text}” at this location.")
+
+
+def runnable(automation: Automation) -> Automation:
+    if not automation.enabled:
+        raise ResolveError(f"The call preset “{automation.name}” is turned off.")
+    return automation

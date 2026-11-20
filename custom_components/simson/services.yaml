@@ -81,3 +81,86 @@ delete_extension:
       selector:
         config_entry:
           integration: simson
+
+call_extension:
+  fields:
+    to_extension:
+      required: true
+      example: "1202"
+      selector:
+        text:
+    from_extension:
+      example: "1201"
+      selector:
+        text:
+    video:
+      default: false
+      selector:
+        boolean:
+    timeout:
+      default: 30
+      selector:
+        number:
+          min: 10
+          max: 120
+          unit_of_measurement: s
+    config_entry_id:
+      selector:
+        config_entry:
+          integration: simson
+run_call_preset:
+  fields:
+    preset:
+      required: true
+      example: Doorbell
+      selector:
+        text:
+    config_entry_id:
+      selector:
+        config_entry:
+          integration: simson
+get_call_history:
+  fields:
+    limit:
+      default: 25
+      selector:
+        number:
+          min: 1
+          max: 200
+    config_entry_id:
+      selector:
+        config_entry:
+          integration: simson
+get_extensions:
+  fields:
+    config_entry_id:
+      selector:
+        config_entry:
+          integration: simson
+get_numbers:
+  fields:
+    config_entry_id:
+      selector:
+        config_entry:
+          integration: simson
+get_call_presets:
+  fields:
+    config_entry_id:
+      selector:
+        config_entry:
+          integration: simson
+set_extension_enabled:
+  fields:
+    extension:
+      required: true
+      example: "1201"
+      selector:
+        text:
+    enabled:
+      required: true
+      selector:
+        boolean:
+    config_entry_id:
+      selector:
+        config_entry:
+          integration: simson
