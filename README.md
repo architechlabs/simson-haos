@@ -27,6 +27,8 @@ Requires Home Assistant 2025.4 or newer. Integration branding in **Devices & ser
 
 If Home Assistant shows an **Add application credentials** form, cancel it. In HACS, update or redownload **Simson 0.1.2** (or newer), restart Home Assistant, and retry from **Add integration**. Simson uses a built-in OAuth client with PKCE.
 
+If a linked location shows **Failed to set up** with a listener error on 0.1.2, update or redownload **Simson 0.1.3** (or newer) in HACS and restart Home Assistant. The existing location will be loaded with its saved sign-in.
+
 The card is added automatically. In a dashboard choose **Add card → Simson**, or use `type: custom:simson-card`.
 
 ## Browser SIP, video and Companion pickup

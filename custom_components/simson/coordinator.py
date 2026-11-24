@@ -69,7 +69,7 @@ class SimsonCoordinator(DataUpdateCoordinator[Workspace]):
         self.site_id: str = entry.data[CONF_SITE_ID]
         self._previous_calls: dict[str, CallInfo] | None = None
         self._previous_extensions = None
-        self._listeners: list[Callable[[CallEvent], None]] = []
+        self._call_listeners: list[Callable[[CallEvent], None]] = []
         self._tick = 0
         self._automations: dict[str, Automation] = {}
         self._numbers: list[CarrierNumber] = []
@@ -85,7 +85,7 @@ class SimsonCoordinator(DataUpdateCoordinator[Workspace]):
             payload[f"{role}_extension"] = party["extension"] if party else None
             payload[f"{role}_name"] = party["name"] if party else None
         self.hass.bus.async_fire(BUS_EVENT, payload)
-        for listener in list(self._listeners):
+        for listener in list(self._call_listeners):
             listener(event)
 
     def _on_live(self, event: CallEvent) -> None:
@@ -115,8 +115,8 @@ class SimsonCoordinator(DataUpdateCoordinator[Workspace]):
         return int(self.config_entry.options.get(CONF_SCAN_ACTIVE, SCAN_INTERVAL_ACTIVE))
 
     def async_add_call_listener(self, listener: Callable[[CallEvent], None]) -> Callable[[], None]:
-        self._listeners.append(listener)
-        return lambda: self._listeners.remove(listener)
+        self._call_listeners.append(listener)
+        return lambda: self._call_listeners.remove(listener)
 
     # ---- fetching ----------------------------------------------------------
 
