@@ -1,0 +1,408 @@
+openapi: 3.1.0
+info:
+  title: Simson Home Assistant integration API
+  version: 1.0.0
+  description: >-
+    Connects one Home Assistant instance to one Simson site through Home
+    Assistant OAuth2 authorization code with PKCE. These endpoints require an
+    active Simson session and current tenant administrator access. Sign-in or
+    a registered profile alone never grants tenant access. Simson validates
+    the instance over HTTPS, verifies the issued access token against its REST
+    API, and encrypts the refresh token before database persistence. OAuth
+    codes, access tokens, refresh tokens, and PKCE verifiers are never returned
+    in API responses. Connected tenant administrators can browse sanitized,
+    entity states and configure call notification assignments through the installed
+    Simson integration's WebSocket commands. General Home Assistant service
+    execution and arbitrary state attributes are unavailable. Home Assistant's client ID is
+    https://simson.architechlabs.in/ and its exact redirect URI is
+    https://simson.architechlabs.in/integrations/home-assistant/callback/.
+servers:
+  - url: https://api-simson.architechlabs.in
+security:
+  - portalSession: []
+paths:
+  /v1/tenants/{tenant_id}/sites/{site_id}/integrations/home-assistant:
+    parameters:
+      - $ref: '#/components/parameters/TenantID'
+      - $ref: '#/components/parameters/SiteID'
+    get:
+      operationId: getHomeAssistantConnection
+      summary: Read the site's Home Assistant connection status
+      description: >-
+        Requires a current tenant administrator grant. Returns non-secret
+        connection metadata only. A missing connection is represented as
+        connected=false.
+      responses:
+        '200':
+          description: Connection metadata or an explicit disconnected status.
+          content:
+            application/json:
+              schema:
+                oneOf:
+                  - $ref: '#/components/schemas/Disconnected'
+                  - $ref: '#/components/schemas/Connected'
+        '400': {$ref: '#/components/responses/Invalid'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '503': {$ref: '#/components/responses/Unavailable'}
+    delete:
+      operationId: disconnectHomeAssistant
+      summary: Remove the site's Home Assistant connection
+      description: >-
+        Requires a current tenant administrator grant. Deletes Simson's
+        encrypted refresh token before attempting best-effort revocation at
+        Home Assistant. upstream_revoked=false means the local credential was
+        removed but upstream revocation could not be confirmed.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {type: object, additionalProperties: false}
+      responses:
+        '200':
+          description: Local credential removed; includes best-effort upstream revocation result.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/DisconnectResult'}
+        '400': {$ref: '#/components/responses/Invalid'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '415': {description: application/json required.}
+        '503': {$ref: '#/components/responses/Unavailable'}
+  /v1/tenants/{tenant_id}/sites/{site_id}/integrations/home-assistant/entities:
+    parameters:
+      - $ref: '#/components/parameters/TenantID'
+      - $ref: '#/components/parameters/SiteID'
+    get:
+      operationId: listHomeAssistantEntities
+      summary: Read a page of sanitized Home Assistant entity states
+      description: >-
+        Requires a current tenant administrator grant and an active Home
+        Assistant connection. Simson decrypts the stored refresh token only in
+        memory, obtains a short-lived access token, and reads /api/states over
+        the already validated HTTPS origin. The response includes only entity
+        ID, domain, friendly name, current state, unit, device class, and
+        entity category. It omits arbitrary attributes, user/context data,
+        tokens, and service controls. States are sorted by entity ID and
+        paginated with an exclusive after cursor. Each request reads the full
+        bounded upstream state response (up to 2 MiB and 5,000 entities).
+        A 409 reauthorization_required response means the user must reconnect
+        the Home Assistant instance.
+      parameters:
+        - name: after
+          in: query
+          required: false
+          schema: {type: string, maxLength: 255, pattern: '^[a-z0-9_]+\.[a-z0-9_]+$'}
+          description: Entity ID cursor from next_after; results begin after this ID.
+        - name: limit
+          in: query
+          required: false
+          schema: {type: integer, minimum: 1, maximum: 100, default: 50}
+      responses:
+        '200':
+          description: A sanitized page of entity states.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/EntityPage'}
+              examples:
+                entityPage:
+                  summary: Sanitized read-only entity page
+                  value:
+                    entities:
+                      - entity_id: sensor.lobby_temperature
+                        domain: sensor
+                        name: Lobby temperature
+                        state: '21.4'
+                        unit: °C
+                        device_class: temperature
+                    next_after: sensor.lobby_temperature
+                    has_more: true
+        '400': {$ref: '#/components/responses/Invalid'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '409': {$ref: '#/components/responses/Conflict'}
+        '503': {$ref: '#/components/responses/Unavailable'}
+  /v1/tenants/{tenant_id}/sites/{site_id}/integrations/home-assistant/authorization:
+    parameters:
+      - $ref: '#/components/parameters/TenantID'
+      - $ref: '#/components/parameters/SiteID'
+    post:
+      operationId: beginHomeAssistantAuthorization
+      summary: Create a short-lived Home Assistant OAuth authorization request
+      description: >-
+        Requires a current tenant administrator grant. Only publicly reachable
+        HTTPS hostnames using port 443 or 8123 are accepted. Simson rejects
+        private, local, reserved, and metadata-service IP addresses and does
+        not follow redirects. The code challenge must be an RFC 7636 S256
+        challenge. The returned state is random, one-use, bound to this actor,
+        tenant, site and challenge, and expires within five minutes.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [instance_url, code_challenge]
+              properties:
+                instance_url:
+                  type: string
+                  format: uri
+                  maxLength: 2048
+                  description: Home Assistant public HTTPS origin; no path, query, fragment, user info, or private address.
+                  example: https://ha.example.net
+                code_challenge:
+                  type: string
+                  pattern: '^[A-Za-z0-9_-]{43}$'
+                  description: Base64URL(SHA-256(code_verifier)); code_verifier remains in the browser session.
+      responses:
+        '200':
+          description: Short-lived authorization URL and one-use state.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/Authorization'}
+        '400': {$ref: '#/components/responses/Invalid'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '409': {$ref: '#/components/responses/Conflict'}
+        '415': {description: application/json required.}
+        '503': {$ref: '#/components/responses/Unavailable'}
+  /v1/tenants/{tenant_id}/sites/{site_id}/integrations/home-assistant/callback:
+    parameters:
+      - $ref: '#/components/parameters/TenantID'
+      - $ref: '#/components/parameters/SiteID'
+    post:
+      operationId: completeHomeAssistantAuthorization
+      summary: Exchange an authorized one-use OAuth code and connect the instance
+      description: >-
+        Requires the same active Simson session that began authorization and a
+        current tenant administrator grant. State is single-use and bound to
+        the originating actor, tenant, site, and PKCE challenge. The provider
+        code is exchanged by the backend; an issued access token must pass an
+        HTTPS GET to the instance's /api/ endpoint before the refresh token is
+        encrypted and persisted. Neither token is returned.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [state, code, code_verifier]
+              properties:
+                state: {type: string, pattern: '^[A-Za-z0-9_-]{43}$'}
+                code: {type: string, minLength: 1, maxLength: 4096}
+                code_verifier: {type: string, minLength: 43, maxLength: 128, pattern: '^[A-Za-z0-9._~-]+$'}
+      responses:
+        '200':
+          description: The verified connection was stored; response metadata contains no tokens.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/Connected'}
+        '400': {$ref: '#/components/responses/Invalid'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '409': {$ref: '#/components/responses/Conflict'}
+        '415': {description: application/json required.}
+        '503': {$ref: '#/components/responses/Unavailable'}
+  /v1/tenants/{tenant_id}/sites/{site_id}/integrations/home-assistant/directory:
+    parameters:
+      - {$ref: '#/components/parameters/TenantID'}
+      - {$ref: '#/components/parameters/SiteID'}
+    get:
+      operationId: getHomeAssistantNotificationDirectory
+      summary: List Home Assistant users, their registered Companion phones, and the site's mappings
+      description: Both the current Simson tenant administrator and the linked Home Assistant administrator must be authorized. Device IDs identify Companion registrations. Push addresses, credentials and webhook identifiers are omitted.
+      responses:
+        '200':
+          description: Bounded Home Assistant directory and site mappings
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [users, routes]
+                additionalProperties: false
+                properties:
+                  users:
+                    type: array
+                    maxItems: 128
+                    items:
+                      type: object
+                      required: [id, name, devices]
+                      additionalProperties: false
+                      properties:
+                        id: {type: string, pattern: '^[a-f0-9]{32}$'}
+                        name: {type: string, minLength: 1, maxLength: 80}
+                        devices:
+                          type: array
+                          maxItems: 16
+                          items:
+                            type: object
+                            required: [id, name]
+                            additionalProperties: false
+                            properties:
+                              id: {type: string, pattern: '^[A-Za-z0-9_-]{1,128}$'}
+                              name: {type: string, minLength: 1, maxLength: 80}
+                  routes:
+                    type: array
+                    maxItems: 64
+                    items: {$ref: '#/components/schemas/NotificationRoute'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '409': {$ref: '#/components/responses/Conflict'}
+        '503': {$ref: '#/components/responses/Unavailable'}
+  /v1/tenants/{tenant_id}/sites/{site_id}/integrations/home-assistant/notification-routes/{endpoint_id}:
+    parameters:
+      - {$ref: '#/components/parameters/TenantID'}
+      - {$ref: '#/components/parameters/SiteID'}
+      - {name: endpoint_id, in: path, required: true, schema: {type: string, format: uuid}}
+    put:
+      operationId: setHomeAssistantNotificationRoute
+      summary: Assign a Simson endpoint's incoming call notifications to a user's own mobile devices
+      description: Requires current administrator rights in both systems. The endpoint must be enabled, belong to the site, and be a phone endpoint. Set user_id to null and devices to an empty list to remove an assignment. This controls notification delivery for an existing SIP destination.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [user_id, devices, dashboard_path]
+              properties:
+                user_id: {type: [string, "null"], pattern: '^[a-f0-9]{32}$'}
+                devices:
+                  type: array
+                  maxItems: 16
+                  uniqueItems: true
+                  items: {type: string, pattern: '^[A-Za-z0-9_-]{1,128}$'}
+                dashboard_path: {type: string, maxLength: 180, pattern: '^/[A-Za-z0-9_-]+(/[A-Za-z0-9_-]+){0,3}/?$'}
+      responses:
+        '204': {description: Mapping saved or removed}
+        '400': {$ref: '#/components/responses/Invalid'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '409': {$ref: '#/components/responses/Conflict'}
+        '503': {$ref: '#/components/responses/Unavailable'}
+
+components:
+  securitySchemes:
+    portalSession:
+      type: apiKey
+      in: cookie
+      name: simson_session
+      description: Backend-issued HttpOnly, Secure session cookie; exact-origin CSRF/CORS policy applies.
+  parameters:
+    TenantID:
+      name: tenant_id
+      in: path
+      required: true
+      schema: {type: string, format: uuid}
+    SiteID:
+      name: site_id
+      in: path
+      required: true
+      schema: {type: string, format: uuid}
+  schemas:
+    NotificationRoute:
+      type: object
+      additionalProperties: false
+      required: [endpoint_id, extension, user_id, devices, dashboard_path]
+      properties:
+        endpoint_id: {type: string, format: uuid}
+        extension: {type: string, pattern: '^[1-9][0-9]{1,7}$'}
+        user_id: {type: string, pattern: '^[a-f0-9]{32}$'}
+        devices:
+          type: array
+          maxItems: 16
+          items: {type: string, pattern: '^[A-Za-z0-9_-]{1,128}$'}
+        dashboard_path: {type: string, maxLength: 180}
+
+    Authorization:
+      type: object
+      additionalProperties: false
+      required: [authorization_url, state]
+      properties:
+        authorization_url: {type: string, format: uri}
+        state: {type: string, pattern: '^[A-Za-z0-9_-]{43}$'}
+    Disconnected:
+      type: object
+      additionalProperties: false
+      required: [connected]
+      properties: {connected: {const: false}}
+    Connected:
+      type: object
+      additionalProperties: false
+      required: [connected, connection]
+      properties:
+        connected: {const: true}
+        connection: {$ref: '#/components/schemas/Connection'}
+    Connection:
+      type: object
+      additionalProperties: false
+      required: [tenant_id, site_id, instance_url, connected_at, last_verified_at, revision]
+      properties:
+        tenant_id: {type: string, format: uuid}
+        site_id: {type: string, format: uuid}
+        instance_url: {type: string, format: uri}
+        connected_at: {type: string, format: date-time}
+        last_verified_at: {type: string, format: date-time}
+        revision: {type: integer, minimum: 1}
+    DisconnectResult:
+      type: object
+      additionalProperties: false
+      required: [upstream_revoked]
+      properties:
+        upstream_revoked: {type: boolean}
+    EntityPage:
+      type: object
+      additionalProperties: false
+      required: [entities, has_more]
+      properties:
+        entities:
+          type: array
+          maxItems: 100
+          items: {$ref: '#/components/schemas/Entity'}
+        next_after: {type: string, maxLength: 255, pattern: '^[a-z0-9_]+\.[a-z0-9_]+$'}
+        has_more: {type: boolean}
+    Entity:
+      type: object
+      additionalProperties: false
+      required: [entity_id, domain, name, state]
+      properties:
+        entity_id: {type: string, maxLength: 255, pattern: '^[a-z0-9_]+\.[a-z0-9_]+$'}
+        domain: {type: string, maxLength: 255}
+        name: {type: string, maxLength: 256}
+        state: {type: string, maxLength: 256}
+        unit: {type: string, maxLength: 64}
+        device_class: {type: string, maxLength: 64}
+        entity_category: {type: string, maxLength: 32}
+    Error:
+      type: object
+      additionalProperties: false
+      required: [code]
+      properties:
+        code: {type: string, enum: [invalid_request, forbidden, not_found, conflict, reauthorization_required, unavailable]}
+  responses:
+    Invalid:
+      description: Invalid path, query, or JSON payload.
+      content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}
+    Unauthorized:
+      description: A valid Simson session is required.
+      content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}
+    Forbidden:
+      description: Current tenant administrator authorization is required.
+      content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}
+    NotFound:
+      description: The connection or authorized resource does not exist.
+      content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}
+    Conflict:
+      description: OAuth state conflicted or expired, or Home Assistant reauthorization is required.
+      content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}
+    Unavailable:
+      description: Simson or Home Assistant is unavailable.
+      content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}

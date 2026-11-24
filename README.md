@@ -19,11 +19,19 @@ cloud directly.
 
 ## Install
 
-1. Add this repository to HACS as a custom repository (type: Integration) and install **Simson**.
+Requires Home Assistant 2025.4 or newer. Integration branding in **Devices & services** uses Home Assistant 2026.3 or newer.
+
+1. Add [`architechlabs/simson-haos`](https://github.com/architechlabs/simson-haos) to HACS as a custom repository (type: Integration) and install **Simson**.
 2. Restart Home Assistant.
 3. **Settings → Devices & services → Add integration → Simson**, sign in, then choose the workspace and location.
 
 The card is added automatically. In a dashboard choose **Add card → Simson**, or use `type: custom:simson-card`.
+
+## Browser SIP, video and Companion pickup
+
+The optional **Simson V2** browser SIP integration is maintained in [`browser-sip/`](browser-sip/). It includes six dashboard cards, SIP audio and video over WebRTC, local camera and media-player cards, Companion pickup, and site-scoped event recovery. Start with its [installation guide](browser-sip/INSTALL.md). Install it manually from the bundled `browser-sip/custom_components/simson_v2` directory or build its ZIP with `npm ci` and `npm run package` from `browser-sip/`.
+
+The standard HACS install uses the `simson` domain with the services and cards documented below. The optional browser component uses `simson_v2` for its own setup and credentials.
 
 ## Services
 
@@ -47,7 +55,7 @@ from the Simson dashboard for now.
 
 ## Permissions
 
-The connection asks for four scopes and shows them on the consent screen:
+The connection shows these scopes on the consent screen:
 
 | Scope | Lets Home Assistant |
 |---|---|
@@ -55,6 +63,8 @@ The connection asks for four scopes and shows them on the consent screen:
 | `extensions.manage` | Create, change and remove phones and reset their passwords |
 | `calls.read` | Read call history and active calls |
 | `calls.control` | Start and end calls |
+| `automations.run` | List and run saved call presets |
+| `events.read` | Receive live call events |
 
 Home Assistant acts as you: it can never do more than your Simson role allows.
 
@@ -123,8 +133,8 @@ action:
 ```
 
 `caller_*` and `callee_*` are filled for calls started from Simson. Calls that
-come from outside carry `null` for both. If the stream drops, the integration
-reconnects on its own and resumes where it stopped, so no call is missed or
-repeated. While it is down, normal refreshing still reports calls. Connections
+come from outside carry `null` for both. When the stream drops, the integration
+reconnects and requests available events after its last cursor. Normal refreshing
+continues to check call state while the stream is unavailable. Connections
 made before this feature need **Reconfigure / sign in again** once to grant
 the new "live call events" permission.

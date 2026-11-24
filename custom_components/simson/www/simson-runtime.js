@@ -14,6 +14,8 @@
 // DOM events on window: simson:incoming, simson:answered, simson:ended,
 // simson:missed. Each carries the call in event.detail.
 
+import { brandImage } from "./simson-brand.js";
+
 const SETTINGS_KEY = "simson.settings";
 const LIVE = ["requesting", "ringing", "active"];
 const defaultSettings = { overlay: true, position: "bottom-right", sound: false };
@@ -26,6 +28,7 @@ const STYLE = `
 .panel.inline{position:static;width:auto;box-shadow:none;animation:none;background:var(--card-background-color,#fff)}
 @keyframes rise{from{opacity:0;transform:translateY(14px) scale(.97)}to{opacity:1;transform:none}}
 .head{display:flex;align-items:center;gap:14px}
+.head .simson-mark{flex:none;margin-inline-start:auto;width:28px;height:28px;border-radius:7px}
 .avatar{position:relative;flex:none;width:52px;height:52px;border-radius:50%;display:grid;place-items:center;color:#fff;background:linear-gradient(135deg,var(--primary-color,#03a9f4),color-mix(in srgb,var(--primary-color,#03a9f4) 55%,#6a1b9a))}
 .avatar svg{width:24px;height:24px;fill:currentColor}
 .avatar.ringing::after,.avatar.active::after{content:"";position:absolute;inset:-5px;border-radius:50%;border:2px solid var(--success-color,#2e7d32);opacity:0;animation:ring 1.6s infinite}
@@ -314,7 +317,7 @@ class CallView extends HTMLElement {
     if (active) { const time = document.createElement("span"); time.className = "timer"; time.textContent = elapsed(call); meta.append("Connected \u00b7 ", time); }
     else meta.textContent = `Ringing since ${new Date(call.started_at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}`;
     who.append(title, meta);
-    head.append(avatar, who);
+    head.append(avatar, who, brandImage());
     const media = document.createElement("div");
     media.className = `media${m.transport.media ? " on" : ""}`;
     const row = document.createElement("div");

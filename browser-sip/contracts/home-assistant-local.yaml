@@ -1,0 +1,54 @@
+openapi: 3.1.0
+info:
+  title: Simson V2 Home Assistant local webhook
+  version: 0.2.0
+  description: Authenticated event input on the Home Assistant instance hosting the integration. This is separate from the Simson API and its scoped automation trigger.
+servers:
+  - url: https://{home_assistant}
+    variables:
+      home_assistant: {default: home.example.net}
+security:
+  - homeAssistantBearer: []
+paths:
+  /api/simson_v2/sites/{site_id}/call-events:
+    parameters:
+      - {name: site_id, in: path, required: true, schema: {type: string, format: uuid}}
+    post:
+      operationId: ingestSimsonCallEvent
+      summary: Publish a call state to an installed Simson location
+      description: A current Home Assistant administrator is required. Events fire Home Assistant automation signals and may notify phones mapped to the SIP endpoint UUID. Delivering a state cannot place, answer or end a SIP call. Lower or duplicate revisions for a known call are ignored.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [site_id, call_id, endpoint_id, revision, extension, state, occurred_at]
+              properties:
+                site_id: {type: string, format: uuid}
+                call_id: {type: string, format: uuid}
+                endpoint_id: {type: string, format: uuid}
+                revision: {type: integer, minimum: 1, maximum: 9007199254740991}
+                extension: {type: string, pattern: '^[1-9][0-9]{1,7}$'}
+                state: {type: string, enum: [ringing, answered, ended, missed]}
+                occurred_at: {type: string, format: date-time}
+                caller: {type: string, minLength: 1, maxLength: 80}
+      responses:
+        '200':
+          description: Accepted or previously handled
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: false
+                required: [accepted]
+                properties:
+                  accepted: {type: boolean}
+        '400': {description: 'Invalid, oversized, stale, or mismatched event'}
+        '401': {description: A valid Home Assistant bearer token is required}
+        '403': {description: Current Home Assistant administrator rights are required}
+        '404': {description: The site has no matching integration entry}
+components:
+  securitySchemes:
+    homeAssistantBearer: {type: http, scheme: bearer}

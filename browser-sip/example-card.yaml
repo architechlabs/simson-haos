@@ -1,0 +1,14 @@
+type: custom:simson-v2-call-card
+title: Front desk
+realm: office.sip.example.net
+websocket: wss://office.sip.example.net:7443
+extension: "203"
+contacts:
+  - name: Reception
+    extension: "201"
+  - name: Front door
+    extension: "202"
+    video: true
+  - name: Warehouse dashboard
+    extension: "204"
+    video: true

@@ -1,0 +1,13 @@
+{
+  "domain": "simson_v2",
+  "name": "Simson V2",
+  "version": "0.4.1",
+  "config_flow": true,
+  "codeowners": [],
+  "dependencies": ["http", "frontend", "my", "websocket_api"],
+  "after_dependencies": ["mobile_app"],
+  "documentation": "https://github.com/architechlabs/simson-haos#readme",
+  "issue_tracker": "https://github.com/architechlabs/simson-haos/issues",
+  "integration_type": "service",
+  "iot_class": "cloud_push"
+}

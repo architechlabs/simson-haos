@@ -3,12 +3,12 @@
   "name": "Simson",
   "codeowners": ["@nitish-mp3"],
   "config_flow": true,
-  "dependencies": ["application_credentials", "http", "frontend"],
+  "dependencies": ["application_credentials", "http", "frontend", "my"],
   "after_dependencies": ["mobile_app", "lovelace"],
-  "documentation": "https://simson.architechlabs.in/integrations/home-assistant",
+  "documentation": "https://github.com/architechlabs/simson-haos#readme",
   "integration_type": "hub",
   "iot_class": "cloud_polling",
-  "issue_tracker": "https://github.com/nitish-mp3/simson-homeassistant/issues",
+  "issue_tracker": "https://github.com/architechlabs/simson-haos/issues",
   "requirements": [],
-  "version": "0.1.0"
+  "version": "0.1.1"
 }

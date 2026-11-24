@@ -1,0 +1,17 @@
+{
+  "name": "@simson/home-assistant",
+  "private": true,
+  "version": "0.4.1",
+  "type": "module",
+  "scripts": {
+    "build": "node build.mjs",
+    "package": "npm run build && python package_release.py",
+    "test": "node --test tests/*.test.mjs"
+  },
+  "dependencies": {
+    "sip.js": "0.21.2"
+  },
+  "devDependencies": {
+    "esbuild": "0.28.2"
+  }
+}

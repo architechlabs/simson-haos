@@ -1,0 +1,23 @@
+trigger_automation:
+  name: Trigger saved Simson automation
+  description: Queue a saved automation with the credentials installed on this Home Assistant host.
+  fields:
+    site_id:
+      name: Simson site ID
+      required: true
+      selector:
+        text:
+    automation:
+      name: Saved key name
+      required: true
+      selector:
+        text:
+    event_id:
+      name: Event ID
+      description: Reuse the same UUID and timestamp when retrying an unacknowledged request.
+      selector:
+        text:
+    occurred_at:
+      name: Event timestamp
+      selector:
+        text:

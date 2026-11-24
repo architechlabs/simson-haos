@@ -1,0 +1,26 @@
+type: grid
+columns: 2
+square: false
+cards:
+  - type: custom:simson-v2-controls-card
+    realm: office.sip.example.net
+    websocket: wss://office.sip.example.net:7443
+    extension: "203"
+  - type: custom:simson-v2-dialer-card
+    realm: office.sip.example.net
+    websocket: wss://office.sip.example.net:7443
+    extension: "203"
+  - type: custom:simson-v2-contacts-card
+    realm: office.sip.example.net
+    websocket: wss://office.sip.example.net:7443
+    extension: "203"
+    contacts:
+      - name: Front door
+        extension: "202"
+        video: true
+      - name: Reception
+        extension: "201"
+  - type: custom:simson-v2-video-card
+    realm: office.sip.example.net
+    websocket: wss://office.sip.example.net:7443
+    extension: "203"

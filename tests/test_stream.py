@@ -1,4 +1,5 @@
 import json
+from contextlib import aclosing
 
 import aiohttp
 import pytest
@@ -20,7 +21,8 @@ async def chunks(*parts: bytes):
 
 
 async def collect(*parts: bytes):
-    return [message async for message in sse.parse_sse(chunks(*parts))]
+    async with aclosing(chunks(*parts)) as source:
+        return [message async for message in sse.parse_sse(source)]
 
 
 async def test_parses_blocks_comments_and_ids_split_across_chunks():

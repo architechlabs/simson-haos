@@ -7,7 +7,9 @@
 //  3. starts downloading the card interface and the call runtime in parallel.
 // Everything heavy lives in simson-card-core.js (cards) and simson-runtime.js
 // (global call layer). Keep this file small and dependency free.
-const VERSION = "0.1.0";
+import { brandImage } from "./simson-brand.js";
+
+const VERSION = "0.1.1";
 const base = (name) => new URL(`./${name}?v=${VERSION}`, import.meta.url).href;
 const retrying = (name) => {
   let promise;
@@ -63,6 +65,10 @@ class SimsonCard extends HTMLElement {
 
   connectedCallback() {
     if (this._impl) return;
+    if (this.closest("[inert]")) {
+      this._preview();
+      return;
+    }
     if (!this._config.view) this._config = { view: this.constructor.defaultView, ...this._config };
     this._status("Opening Simson…");
     this._mount();
@@ -94,7 +100,28 @@ class SimsonCard extends HTMLElement {
     const box = document.createElement("div");
     box.setAttribute("role", "status");
     box.style.cssText = "padding:20px;min-height:72px;box-sizing:border-box;border-radius:var(--ha-card-border-radius,12px);background:var(--ha-card-background,var(--card-background-color,#fff));color:var(--primary-text-color);font:14px var(--paper-font-body1_-_font-family,system-ui)";
-    box.textContent = message;
+    box.style.display = "flex";
+    box.style.alignItems = "center";
+    box.style.gap = "10px";
+    box.append(brandImage(), message);
+    this.shadowRoot.replaceChildren(box);
+  }
+
+  _preview() {
+    const { icon, description } = this.constructor.metadata;
+    const box = document.createElement("div");
+    box.className = "simson-preview";
+    box.style.cssText = "display:grid;gap:10px;padding:14px;justify-items:start;border-radius:var(--ha-card-border-radius,12px);background:var(--card-background-color,#fff);color:var(--secondary-text-color,#576171);font:13px/1.4 system-ui";
+    const mark = brandImage("wordmark");
+    mark.style.cssText = "box-sizing:content-box;padding:6px 8px;border-radius:7px;background:#f6f5f1;max-width:100%;object-fit:contain";
+    const detail = document.createElement("div");
+    detail.style.cssText = "display:flex;align-items:center;gap:8px;min-width:0";
+    const glyph = document.createElement("ha-icon");
+    glyph.setAttribute("icon", icon);
+    glyph.setAttribute("aria-hidden", "true");
+    glyph.style.cssText = "color:var(--primary-color,#174cc2);flex:none;--mdc-icon-size:18px";
+    detail.append(glyph, description);
+    box.append(mark, detail);
     this.shadowRoot.replaceChildren(box);
   }
 
@@ -105,23 +132,24 @@ class SimsonCard extends HTMLElement {
 
 // One card for everything, plus focused cards that can be placed anywhere.
 const CARDS = [
-  ["simson-card", "combined", "Simson", "Dial, see who is online, hang up and add phones."],
-  ["simson-relay-card", "combined", "Simson (compatibility)", "Same as the Simson card."],
-  ["simson-dialer-card", "dialer", "Simson dialer", "Just the dialer."],
-  ["simson-phones-card", "phones", "Simson phones", "Who is online; tap a phone to call it."],
-  ["simson-live-call-card", "live", "Simson live call", "The call in progress, with its controls, wherever you want it."],
-  ["simson-add-phone-card", "add", "Simson add phone", "Create a phone and see its settings once."],
+  ["simson-card", "combined", "Simson", "mdi:phone-in-talk-outline", "Dial, check registration and add phones."],
+  ["simson-relay-card", "combined", "Simson (compatibility)", "mdi:phone-in-talk-outline", "Dial, check registration and add phones."],
+  ["simson-dialer-card", "dialer", "Simson dialer", "mdi:dialpad", "Dial an extension for an audio or video call."],
+  ["simson-phones-card", "phones", "Simson phones", "mdi:phone-check-outline", "See phone registration and select a destination."],
+  ["simson-live-call-card", "live", "Simson live call", "mdi:phone-outline", "See and control the call in progress."],
+  ["simson-add-phone-card", "add", "Simson add phone", "mdi:phone-plus-outline", "Create a phone and see its settings once."],
 ];
 window.customCards = window.customCards || [];
-for (const [name, view, title, description] of CARDS) {
+for (const [name, view, title, icon, description] of CARDS) {
   if (!customElements.get(name)) {
     customElements.define(name, class extends SimsonCard {
       static defaultView = view;
+      static metadata = { icon, description };
       static getStubConfig() { return { type: `custom:${name}`, view }; }
     });
   }
   if (name !== "simson-relay-card" && !window.customCards.some((card) => card.type === name)) {
-    window.customCards.push({ type: name, name: title, description, preview: false });
+    window.customCards.push({ type: name, name: title, description, preview: true });
   }
 }
 

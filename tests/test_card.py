@@ -143,6 +143,31 @@ def test_every_card_is_defined_immediately_even_when_the_interface_is_slow(site,
     assert not page.errors, page.errors
 
 
+def test_picker_previews_have_branding_without_mounting_the_call_interface(site, page):
+    open_page(page, site, cards="")
+    visible_cards = page.evaluate("""() => {
+      const picker = document.createElement('div');
+      picker.inert = true;
+      document.body.append(picker);
+      const types = window.customCards.filter((card) => card.preview).map((card) => card.type);
+      for (const type of types) {
+        const card = document.createElement(type);
+        card.setConfig(customElements.get(type).getStubConfig());
+        card.hass = window.hass;
+        picker.append(card);
+      }
+      return types;
+    }""")
+    assert len(visible_cards) == 5
+    assert page.locator(".simson-preview").count() == 5
+    assert page.locator("simson-card-impl").count() == 0
+    assert page.get_by_alt_text("Simson by Architech Labs").count() == 5
+    assert len(set(page.locator(".simson-preview ha-icon").evaluate_all("icons => icons.map(icon => icon.getAttribute('icon'))"))) == 5
+    assert page.evaluate("window.calls.length") == 0
+    assert page.evaluate("window.media.requests.length") == 0
+    assert not page.errors, page.errors
+
+
 def test_lists_phones_with_status_and_disables_gateways(site, page):
     open_page(page, site)
     inner = impl_ready(page)

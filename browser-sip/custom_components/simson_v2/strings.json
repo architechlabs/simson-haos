@@ -1,0 +1,17 @@
+{
+  "config": {
+    "step": {
+      "workspace": {"title": "Choose a Simson workspace", "data": {"tenant_id": "Workspace"}},
+      "site": {"title": "Link a Simson location", "data": {"site_id": "Location"}}
+    },
+    "abort": {
+      "already_configured": "This Simson location is already linked.",
+      "missing_storage_key": "Install the private OAuth encryption key on the Home Assistant host, then add Simson V2 again.",
+      "no_workspaces": "Sign in with a Simson account that administers a workspace.",
+      "no_sites": "No accessible Simson locations were returned.",
+      "oauth_failed": "Simson sign-in could not be completed. Try connecting again.",
+      "oauth_unauthorized": "Simson declined this sign-in. Restart setup and approve the requested permissions.",
+      "reauth_successful": "Simson V2 is connected again."
+    }
+  }
+}

@@ -4,7 +4,11 @@ from __future__ import annotations
 
 from homeassistant.components.application_credentials import AuthorizationServer, ClientCredential
 from homeassistant.core import HomeAssistant
-from homeassistant.helpers.config_entry_oauth2_flow import AbstractOAuth2Implementation, LocalOAuth2ImplementationWithPkce
+from homeassistant.helpers.config_entry_oauth2_flow import (
+    AbstractOAuth2Implementation,
+    LocalOAuth2ImplementationWithPkce,
+    MY_AUTH_CALLBACK_PATH,
+)
 
 from .const import OAUTH_AUTHORIZE_URL, OAUTH_TOKEN_URL, SCOPES
 
@@ -13,8 +17,12 @@ class SimsonOAuth2Implementation(LocalOAuth2ImplementationWithPkce):
     """Asks for the scopes the integration needs on the consent screen."""
 
     @property
+    def redirect_uri(self) -> str:
+        return MY_AUTH_CALLBACK_PATH
+
+    @property
     def extra_authorize_data(self) -> dict:
-        return {"scope": " ".join(SCOPES)}
+        return {**super().extra_authorize_data, "scope": " ".join(SCOPES)}
 
 
 async def async_get_auth_implementation(hass: HomeAssistant, auth_domain: str, credential: ClientCredential) -> AbstractOAuth2Implementation:

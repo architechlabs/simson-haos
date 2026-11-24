@@ -21,6 +21,7 @@ class SimsonCallEvents(EventEntity):
 
     _attr_has_entity_name = True
     _attr_translation_key = "calls"
+    _attr_icon = "mdi:phone-log"
     _attr_event_types = EVENT_TYPES
 
     def __init__(self, coordinator: SimsonCoordinator) -> None:

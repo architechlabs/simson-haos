@@ -4,11 +4,16 @@
 // belong to the global runtime (window.simson), so they keep working on any
 // dashboard, panel or custom page. The card only asks for them.
 
+import { brandImage } from "./simson-brand.js";
+
 const STYLE = `
 :host{display:block}
 *{box-sizing:border-box}
 .card{display:grid;gap:16px;padding:18px;border-radius:var(--ha-card-border-radius,16px);background:var(--ha-card-background,var(--card-background-color,#fff));color:var(--primary-text-color);box-shadow:var(--ha-card-box-shadow,none);font-family:var(--paper-font-body1_-_font-family,system-ui)}
 .top{display:flex;align-items:center;justify-content:space-between;gap:10px}
+.identity{display:flex;align-items:center;gap:8px;min-width:0}
+.simson-mark{display:block;flex:none;width:32px;height:32px;border-radius:8px}
+.simson-wordmark{display:block;box-sizing:content-box;width:132px;max-width:100%;height:auto;padding:6px 8px;border-radius:8px;background:#f6f5f1}
 h2{margin:0;font-size:19px;font-weight:650;letter-spacing:-.01em}
 h3{margin:0 0 8px;font-size:12px;font-weight:650;color:var(--secondary-text-color);text-transform:uppercase;letter-spacing:.06em}
 .pill{padding:3px 10px;border-radius:999px;font-size:12px;font-weight:600;background:color-mix(in srgb,var(--success-color,#2e7d32) 16%,transparent);color:var(--primary-text-color)}
@@ -120,6 +125,8 @@ class SimsonCardImpl extends HTMLElement {
     if (!this._from || !callable.some((phone) => phone.number === this._from)) this._from = callable[0]?.number || "";
     const view = this._view;
     const parts = [];
+    const headings = { dialer: "Dialer", phones: "Phones", live: "Live call", add: "Add phone" };
+    if (headings[view]) parts.push(el("div", { class: "identity" }, brandImage(), el("h2", {}, this._config.title || headings[view])));
     if (view === "combined") parts.push(this._header(phones), this._dialer(callable), this._phoneGrid(phones), this._live(), this._status(), this._createdBox(), this._addPhone());
     else if (view === "dialer") parts.push(this._dialer(callable), this._status());
     else if (view === "phones") parts.push(this._phoneGrid(phones), this._status());
@@ -131,7 +138,8 @@ class SimsonCardImpl extends HTMLElement {
 
   _header(phones) {
     const online = phones.filter((phone) => phone.online).length;
-    return el("div", { class: "top" }, el("h2", {}, this._config.title || "Simson"), phones.length > 0 && el("span", { class: "pill" }, `${online} online`));
+    const identity = this._config.title ? el("div", { class: "identity" }, brandImage(), el("h2", {}, this._config.title)) : brandImage("wordmark");
+    return el("div", { class: "top" }, identity, phones.length > 0 && el("span", { class: "pill" }, `${online} online`));
   }
 
   _status() {
