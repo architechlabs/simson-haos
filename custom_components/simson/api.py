@@ -41,6 +41,10 @@ class SimsonNotFound(SimsonError):
     """The workspace, location, extension or call no longer exists."""
 
 
+class SimsonCallBridgeUnavailable(SimsonError):
+    """This installation does not accept handset bridge requests."""
+
+
 class SimsonConflict(SimsonError):
     """The record changed. Reload it and try again."""
 
@@ -87,6 +91,11 @@ class SimsonApi:
                     raise SimsonPlanError("This feature is not included in the workspace plan.")
                 if status == 403:
                     raise SimsonPermissionError("This account may not do that in the workspace.")
+                code = payload.get("code") if isinstance(payload, dict) else None
+                if status == 503 and code == "call_bridge_disabled" or (
+                    status == 404 and method == "POST" and path.endswith("/call-intents") and not code
+                ):
+                    raise SimsonCallBridgeUnavailable("Ring phones is unavailable. The V2 call execution service must be enabled for this installation.")
                 if status == 404:
                     raise SimsonNotFound("That record no longer exists.")
                 if status == 409:

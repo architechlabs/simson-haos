@@ -133,3 +133,19 @@ async def test_start_call_and_hang_up_use_the_call_routes(server):
         assert recorder.requests[-1]["path"].endswith("/call-intents/call1/cancel")
     finally:
         await session.close()
+
+@pytest.mark.parametrize("status,payload,error", [
+    (503, {"code": "call_bridge_disabled"}, api.SimsonCallBridgeUnavailable),
+    (404, {}, api.SimsonCallBridgeUnavailable),
+    (404, {"code": "not_found"}, api.SimsonNotFound),
+])
+async def test_call_bridge_disabled_is_distinct_from_missing_endpoint(server, status, payload, error):
+    recorder, test_server = server
+    client, session = await make(test_server)
+    try:
+        recorder.status = status
+        recorder.payload = payload
+        with pytest.raises(error):
+            await client.start_call(TENANT, SITE, "node", "source", "target")
+    finally:
+        await session.close()

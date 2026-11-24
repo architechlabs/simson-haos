@@ -31,6 +31,8 @@ def plan_call(workspace: Workspace, from_extension: str, to_extension: str) -> t
     for ext in (source, target):
         if not ext.enabled:
             raise ResolveError(f"Extension {ext.extension} is turned off.")
+        if workspace.nodes and not ext.node_id:
+            raise ResolveError(f"Assign extension {ext.extension} to a phone group in Simson first.")
         if ext.gateway:
             raise ResolveError(f"Extension {ext.extension} is a carrier gateway. Use a browser SIP card for an authorized carrier route.")
     if not workspace.media_node_id:
@@ -40,7 +42,7 @@ def plan_call(workspace: Workspace, from_extension: str, to_extension: str) -> t
 
 def default_caller(workspace: Workspace, preferred: str | None = None) -> str:
     """The phone calls come from when a script does not say: the chosen one, else the first usable."""
-    usable = sorted((ext for ext in workspace.extensions.values() if ext.enabled and not ext.gateway), key=lambda ext: (len(ext.extension), ext.extension))
+    usable = sorted((ext for ext in workspace.extensions.values() if ext.enabled and not ext.gateway), key=lambda ext: (ext.online is not True, len(ext.extension), ext.extension))
     if preferred and any(ext.extension == str(preferred) for ext in usable):
         return str(preferred)
     if not usable:

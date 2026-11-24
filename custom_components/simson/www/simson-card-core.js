@@ -151,7 +151,7 @@ class SimsonCardImpl extends HTMLElement {
     const phones = knownPhones ?? (this._hasPhoneControls() ? this._phones() : []);
     this._phoneInventory = JSON.stringify(phones);
     const callable = phones.filter((phone) => !phone.gateway && phone.enabled);
-    if (!this._from || !callable.some((phone) => phone.number === this._from)) this._from = callable[0]?.number || "";
+    if (!this._from || !callable.some((phone) => phone.number === this._from)) this._from = callable.find((phone) => phone.online === true)?.number || callable[0]?.number || "";
     const view = this._view;
     const parts = [];
     const headings = { dialer: "Dialer", phones: "Phones", live: "Live call", add: "Phone setup", history: "Call history" };
@@ -251,6 +251,7 @@ class SimsonCardImpl extends HTMLElement {
       el("div", { class: "actions" },
         el("button", { type: "submit", disabled: disabled() }, this._busy ? "Calling…" : "Ring phones"),
         this._config.video !== false && el("button", { type: "button", class: "video", disabled: disabled(), onclick: () => this._placeCall(true), "aria-label": "Start a video call" }, "Video")),
+      el("p", { class: "note" }, "Pick up the first phone to ring the destination."),
     );
   }
 

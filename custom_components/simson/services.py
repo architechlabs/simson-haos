@@ -9,7 +9,7 @@ from homeassistant.core import HomeAssistant, ServiceCall, SupportsResponse
 from homeassistant.exceptions import HomeAssistantError, ServiceValidationError
 from homeassistant.helpers import config_validation as cv
 
-from .api import SimsonConflict, SimsonError, SimsonNotFound, SimsonPermissionError, SimsonPlanError
+from .api import SimsonCallBridgeUnavailable, SimsonConflict, SimsonError, SimsonNotFound, SimsonPermissionError, SimsonPlanError
 from .const import (
     DOMAIN,
     SERVICE_CALL,
@@ -47,7 +47,7 @@ def _entry(hass: HomeAssistant, data: dict[str, Any]) -> SimsonConfigEntry:
 
 
 def _explain(error: Exception) -> HomeAssistantError:
-    if isinstance(error, ResolveError):
+    if isinstance(error, (ResolveError, SimsonCallBridgeUnavailable)):
         return ServiceValidationError(str(error))
     if isinstance(error, SimsonPlanError):
         return ServiceValidationError("This feature is not included in the workspace plan.")

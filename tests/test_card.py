@@ -188,9 +188,8 @@ def test_module_failures_recover_on_mobile_without_reloading(site, page):
     page.goto(f"{site}/harness.html?cards=simson-card")
     retry = page.get_by_role("button", name="Retry")
     retry.wait_for()
+    # Allow the scheduled retry to recover without requiring a tap or a reload.
     broken = False
-    if retry.is_visible():
-        retry.click()
     card = impl_ready(page)
     assert card.get_by_label("Extension to call").is_visible()
     page.wait_for_function("window.__subs.simson_call_event?.length === 1")
