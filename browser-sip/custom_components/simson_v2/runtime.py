@@ -174,14 +174,15 @@ class Site:
                 self.report_notification(event, "clear_requested")
             return
         route = self.routes.get(event["endpoint_id"])
-        if not self.notifications_enabled or not route or call_id in self.deliveries or route["user_id"] not in await active_users(self.hass):
+        if not self.notifications_enabled or not route or route.get("extension") != event["extension"] or call_id in self.deliveries or route["user_id"] not in await active_users(self.hass):
             return
         # An answer/end can arrive while looking up the user.
         current = self.calls.get(call_id)
         if not self.notifications_enabled or not current or current[0]["state"] != "ringing" or current[1] <= monotonic() or self.routes.get(event["endpoint_id"]) != route:
             return
         devices = companion_devices(self.hass).get(route["user_id"], {})
-        selected = tuple(device for device in route["devices"] if device in devices)
+        configured_devices = route["devices"]
+        selected = tuple(device for device in configured_devices if device in devices) if configured_devices else tuple(devices)[:16]
         if not selected:
             return
         self.deliveries[call_id] = (route["user_id"], selected)

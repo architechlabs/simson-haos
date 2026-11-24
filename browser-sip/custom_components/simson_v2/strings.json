@@ -1,8 +1,18 @@
 {
   "config": {
     "step": {
-      "workspace": {"title": "Choose a Simson workspace", "data": {"tenant_id": "Workspace"}},
-      "site": {"title": "Link a Simson location", "data": {"site_id": "Location"}}
+      "workspace": {
+        "title": "Choose a Simson workspace",
+        "data": {
+          "tenant_id": "Workspace"
+        }
+      },
+      "site": {
+        "title": "Link a Simson location",
+        "data": {
+          "site_id": "Location"
+        }
+      }
     },
     "abort": {
       "already_configured": "This Simson location is already linked.",
@@ -12,6 +22,44 @@
       "oauth_failed": "Simson sign-in could not be completed. Try connecting again.",
       "oauth_unauthorized": "Simson declined this sign-in. Restart setup and approve the requested permissions.",
       "reauth_successful": "Simson V2 is connected again."
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "People and phone mappings",
+        "description": "Choose an existing SIP extension. Its current call routing is managed in Simson.",
+        "data": {
+          "endpoint": "SIP extension",
+          "operation": "Action"
+        }
+      },
+      "assign": {
+        "title": "Choose a Home Assistant user",
+        "data": {
+          "user_id": "Home Assistant user"
+        }
+      },
+      "devices": {
+        "title": "Choose Companion phones",
+        "description": "Leave the phone selection empty to notify this user's registered Companion phones automatically. The dashboard must contain this extension's browser call card.",
+        "data": {
+          "devices": "Companion phones",
+          "dashboard_path": "Call dashboard path"
+        }
+      },
+      "remove": {
+        "title": "Remove phone mapping",
+        "description": "This removes incoming call notifications for this assignment."
+      }
+    },
+    "abort": {
+      "mapping_unavailable": "This location is unavailable or the assignment is missing.",
+      "no_mapping_extensions": "No enabled SIP extensions are available for this location yet.",
+      "no_mapping_users": "There are no active Home Assistant users to assign."
+    },
+    "error": {
+      "invalid_mapping": "Check the enabled extension, Companion phones and local dashboard path."
     }
   }
 }

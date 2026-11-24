@@ -1,7 +1,7 @@
 # Simson for Home Assistant
 
 Call between the phones at a Simson location, see who is online, react to calls in
-automations, and add phones, all from Home Assistant. There is no add-on to
+automations and see status for existing phones, all from Home Assistant. There is no add-on to
 install: Home Assistant signs in to Simson with OAuth and talks to the Simson
 cloud directly.
 
@@ -13,8 +13,7 @@ cloud directly.
 | **Phones** | A `Registered` sensor for every SIP phone and gateway, grouped under one device per location. |
 | **Calls** | `simson.call` rings two phones and connects them. Audio goes phone to phone over the voice service, so there is no browser handshake to wait for. |
 | **Events** | An event entity fires `incoming`, `answered`, `ended` and `missed`. The same events go on the bus as `simson_call_event`. |
-| **Phones from Home Assistant** | `simson.create_extension`, `simson.reset_extension_password` and `simson.delete_extension`. The new password arrives sealed and is shown once. |
-| **Dashboard card** | `Simson` card: pick a phone, dial, hang up, add a phone. |
+| **Dashboard card** | `Simson` rings physical phones. `Simson browser phone` supports direct microphone and video calls on this device. |
 | **Blueprint** | Push a notification on incoming and missed calls. |
 
 ## Install
@@ -31,11 +30,33 @@ If a linked location shows **Failed to set up** with a listener error on 0.1.2, 
 
 The card is added automatically. In a dashboard choose **Add card → Simson**, or use `type: custom:simson-card`.
 
-## Browser SIP, video and Companion pickup
+## Talk from the dashboard
 
-The optional **Simson V2** browser SIP integration is maintained in [`browser-sip/`](browser-sip/). It includes six dashboard cards, SIP audio and video over WebRTC, local camera and media-player cards, Companion pickup, and site-scoped event recovery. Start with its [installation guide](browser-sip/INSTALL.md). Install it manually from the bundled `browser-sip/custom_components/simson_v2` directory or build its ZIP with `npm ci` and `npm run package` from `browser-sip/`.
+The Simson card includes the browser phone. Use Home Assistant over HTTPS and a dedicated, existing browser SIP extension
+with a matching SIP realm and WSS address. Enter its SIP password through
+the card's **Connect** form. Card configuration stores only connection details.
 
-The standard HACS install uses the `simson` domain with the services and cards documented below. The optional browser component uses `simson_v2` for its own setup and credentials.
+```yaml
+type: custom:simson-browser-phone-card
+browser:
+  realm: office.sip.example.net
+  websocket: wss://office.sip.example.net:7443
+  extension: "203"
+  gateway_prefix: "*9"
+  keep_connected: true
+  contacts:
+    - {name: Front door, extension: "202", video: true}
+    - {name: Reception group, extension: "*81", mode: route}
+```
+
+Remove the example carrier prefix unless it matches the outbound route configured
+in Simson for this extension. **SIP phone** calls an extension, **Node or route**
+dials a route code configured in Simson, and **Outside** uses the configured
+carrier prefix. The media server enforces routing, caller permissions and allowed
+numbers. Separate browser layouts are available for dialing, contacts, controls,
+video, and a local camera or media player. Install the optional [Simson V2 component](browser-sip/INSTALL.md)
+for Companion notifications and site entities. Its phone assignment is under
+**Settings → Devices & services → Simson V2 → Configure**.
 
 ## Services
 
@@ -46,16 +67,9 @@ data:
   to_extension: "1202"
 ```
 
-```yaml
-action: simson.create_extension
-data:
-  name: Kitchen
-  extension: "1204"
-```
-
-`simson.call` and `simson.create_extension` return data you can use in scripts
-(`response_variable`). Calls to outside numbers through a carrier gateway are placed
-from the Simson dashboard for now.
+That action rings the source handset and connects it to the destination.
+`simson.get_targets` lists extensions, groups and saved presets for scripts.
+Provision, enable, and reset extensions from the Simson portal.
 
 ## Permissions
 
@@ -64,7 +78,6 @@ The connection shows these scopes on the consent screen:
 | Scope | Lets Home Assistant |
 |---|---|
 | `workspace.read` | See locations, phones and who is online |
-| `extensions.manage` | Create, change and remove phones and reset their passwords |
 | `calls.read` | Read call history and active calls |
 | `calls.control` | Start and end calls |
 | `automations.run` | List and run saved call presets |
@@ -101,7 +114,7 @@ waits for the connection first. The default transport rings the two phones and
 connects them, so it needs no browser audio and asks for nothing.
 
 **Cards.** `simson-card` (everything), `simson-dialer-card`, `simson-phones-card`,
-`simson-live-call-card` and `simson-add-phone-card`. Each can be placed alone.
+`simson-live-call-card`, `simson-history-card` and `simson-browser-phone-card`. Each can be placed alone.
 
 ## Why the card no longer shows "Configuration error"
 

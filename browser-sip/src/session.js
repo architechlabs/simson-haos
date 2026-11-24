@@ -1,12 +1,18 @@
 const sessions = new Map();
 export const idleSnapshot = Object.freeze({ connection: "offline", call: null, message: "" });
 let phoneModule;
+let moduleFailures = 0;
 
 function loadPhone() {
-  phoneModule ??= import("./browser-phone.js").catch((error) => {
-    phoneModule = undefined;
-    throw error;
-  });
+  if (!phoneModule) {
+    const url = new URL("./chunks/browser-phone.js", import.meta.url);
+    phoneModule = (moduleFailures ? import(url.href + "?retry=" + moduleFailures) : import("./browser-phone.js"))
+      .catch((error) => {
+        moduleFailures += 1;
+        phoneModule = undefined;
+        throw error;
+      });
+  }
   return phoneModule;
 }
 
@@ -110,7 +116,7 @@ class SessionGroup {
       if (this.connectAttempt !== attempt) return;
       this.connectAttempt = null;
       this.releaseAudio();
-      this.publish({ ...idleSnapshot, message: "The phone module could not load. Refresh Home Assistant and try again." });
+      this.publish({ ...idleSnapshot, message: "The phone module could not load. Connect again to retry." });
       if (!this.listeners.size) this.releaseWhenIdle();
       return;
     }

@@ -3,6 +3,7 @@
 import functools
 import http.server
 import pathlib
+import re
 import threading
 import time
 
@@ -31,9 +32,7 @@ HARNESS = """<!doctype html><meta charset=utf-8><body>
       window.calls.push(["ws", message]);
       if (window.failCalls) throw new Error("Extension 1202 is turned off.");
       if (message.service === "get_call_history") return { response: { calls: [{ phase: "ended", started_at: "2026-11-20T10:00:00Z", answered: true, duration_seconds: 42 }] } };
-      return message.service === "create_extension"
-        ? { response: { extension: "1204", username: "1204", server: "sip.example", port: 5061, transport: "tls", password: "one-time-secret" } }
-        : { response: { call_id: "new-call", state: "queued" } };
+      return { response: { call_id: "new-call", state: "queued" } };
     },
   };
   document.getElementById("ha").hass = window.hass;
@@ -221,7 +220,7 @@ def test_the_phone_transport_does_not_ask_for_the_microphone(site, page):
     open_page(page, site)
     inner = impl_ready(page)
     inner.get_by_label("Extension to call").fill("1202")
-    inner.get_by_role("button", name="Call", exact=True).click()
+    inner.get_by_role("button", name="Ring phones", exact=True).click()
     page.wait_for_function("window.calls.length === 1")
     message = page.evaluate("window.calls[0]")
     assert message[0] == "ws" and message[1]["service"] == "call" and message[1]["service_data"] == {"from_extension": "1201", "to_extension": "1202"}
@@ -311,25 +310,43 @@ def test_service_errors_are_shown_to_the_user(site, page):
     inner = impl_ready(page)
     page.evaluate("window.failCalls = true")
     inner.get_by_label("Extension to call").fill("1202")
-    inner.get_by_role("button", name="Call", exact=True).click()
+    inner.get_by_role("button", name="Ring phones", exact=True).click()
     inner.get_by_role("alert").wait_for()
     assert "turned off" in inner.get_by_role("alert").text_content()
 
 
-def test_adding_a_phone_shows_the_password_once(site, page):
-    open_page(page, site)
-    inner = impl_ready(page)
-    inner.get_by_role("button", name="Add a phone").click()
-    inner.get_by_label("Phone name").fill("Garage")
-    inner.get_by_label("Extension number").fill("1204")
-    inner.get_by_role("button", name="Create").click()
-    inner.get_by_text("shown only once").wait_for()
-    sent = page.evaluate("window.calls[0][1]")
-    assert sent == {"type": "call_service", "domain": "simson", "service": "create_extension", "service_data": {"name": "Garage", "extension": "1204", "notify": False}, "return_response": True}
-    assert "one-time-secret" in shadow_text(inner)
-    inner.get_by_role("button", name="I have saved it").click()
-    assert "one-time-secret" not in shadow_text(inner)
-    assert not page.errors, page.errors
+def test_phone_cards_never_offer_provisioning(site, page):
+    open_page(page, site, cards="simson-card,simson-add-phone-card")
+    combined = impl_ready(page)
+    old_setup = impl_ready(page, "simson-add-phone-card")
+    old_setup.get_by_text("Manage SIP extensions in the Simson portal.").wait_for()
+    assert combined.get_by_role("button", name="Add a phone").count() == 0
+    assert page.evaluate("window.customCards.some(card => card.type === 'simson-add-phone-card')") is False
+    assert page.evaluate("window.calls") == []
+
+
+def test_browser_phone_embeds_existing_transport_and_preserves_it_on_ha_updates(site, page):
+    open_page(page, site, cards="")
+    page.route("**/browser-sip/simson-call-card.js", lambda route: route.fulfill(
+        status=200, content_type="text/javascript", body="""
+        customElements.define("simson-v2-call-card", class extends HTMLElement {
+          setConfig(value) { this.textContent = "Browser extension " + value.extension; }
+        });
+    """))
+    page.evaluate("""() => {
+        const card = document.createElement("simson-browser-phone-card");
+        card.setConfig({ browser: { realm: "sip.example.net", websocket: "wss://sip.example.net:7443", extension: "1201" } });
+        document.body.append(card);
+        card.hass = window.hass;
+    }""")
+    browser_phone = impl_ready(page, "simson-browser-phone-card")
+    browser_phone.get_by_text("Browser extension 1201").wait_for()
+    assert browser_phone.locator("simson-v2-call-card").evaluate("""(child) => {
+        const parent = document.querySelector("simson-browser-phone-card");
+        parent.hass = { ...window.hass };
+        return child.isConnected && child.hass !== window.hass;
+    }""")
+    assert page.evaluate("window.calls") == []
 
 
 def test_a_failed_download_shows_a_retry_message_not_a_configuration_error(site, page):
@@ -338,3 +355,58 @@ def test_a_failed_download_shows_a_retry_message_not_a_configuration_error(site,
     page.wait_for_function("window.ready === true")
     page.get_by_role("button", name="Retry").wait_for(timeout=6000)
     assert "Configuration error" not in page.locator("simson-card").evaluate("(host) => host.shadowRoot.textContent")
+
+
+def test_live_browser_dialer_sends_only_same_realm_route_and_outside_invites(site):
+    realms = "voice.fixture.invalid"
+    invites = []
+    with playwright.sync_playwright() as runtime:
+        browser = runtime.chromium.launch(args=["--use-fake-device-for-media-stream", "--use-fake-ui-for-media-stream"])
+        context = browser.new_context(permissions=["microphone", "camera"], viewport={"width": 320, "height": 720})
+        page = context.new_page()
+
+        def sip(ws):
+            def receive(message):
+                first, *headers = message.split("\r\n")
+                if first.startswith("INVITE "):
+                    invites.append(first.split(" ")[1])
+                    status = "486 Busy Here"
+                elif first.startswith("REGISTER "):
+                    status = "200 OK"
+                else:
+                    return
+                rows = [f"SIP/2.0 {status}"]
+                for name in ("Via", "From", "To", "Call-ID", "CSeq", "Contact"):
+                    value = next((line for line in headers if line.lower().startswith(name.lower() + ":")), None)
+                    if value:
+                        rows.append(value + (";tag=simson-fixture" if name == "To" and ";tag=" not in value else ""))
+                ws.send("\r\n".join([*rows, "Content-Length: 0", "", ""]))
+            ws.on_message(receive)
+
+        page.route_web_socket(re.compile(r"^wss://voice\.fixture\.invalid:7443/?$"), sip)
+        open_page(page, site, cards="")
+        page.evaluate("""() => {
+            const card = document.createElement("simson-browser-phone-card");
+            card.setConfig({ browser: { realm: "voice.fixture.invalid", websocket: "wss://voice.fixture.invalid:7443",
+                extension: "1201", gateway_prefix: "*9" } });
+            document.body.append(card);
+            card.hass = window.hass;
+        }""")
+        card = impl_ready(page, "simson-browser-phone-card")
+        card.get_by_label("SIP password").fill("fixture-password")
+        card.get_by_role("button", name="Connect", exact=True).click()
+        card.get_by_text("Ready", exact=True).wait_for(timeout=6000)
+        for mode, label, number in [
+            ("extension", "SIP extension", "1202"),
+            ("route", "Configured dial code", "*81"),
+            ("outside", "Phone number", "+15551234567"),
+        ]:
+            card.get_by_label("Call type").select_option(mode)
+            card.get_by_label(label, exact=True).fill(number)
+            if mode == "outside":
+                assert not card.get_by_role("button", name="Video call").is_visible()
+            card.get_by_role("button", name="Audio call").click()
+            card.locator("#dial").wait_for(state="visible", timeout=6000)
+        assert invites == [f"sip:1202@{realms}", f"sip:*81@{realms}", f"sip:*9+15551234567@{realms}"]
+        assert page.evaluate("window.calls") == []
+        browser.close()

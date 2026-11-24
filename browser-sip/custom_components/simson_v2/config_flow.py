@@ -2,7 +2,13 @@
 import logging
 
 import voluptuous as vol
+from homeassistant.config_entries import OptionsFlow
+from homeassistant.core import callback
 from homeassistant.helpers.config_entry_oauth2_flow import AbstractOAuth2FlowHandler
+from homeassistant.helpers.selector import SelectSelector, SelectSelectorConfig, SelectSelectorMode
+
+from .companion import active_users, companion_devices
+from .transport import save_route
 
 from .cloud import CloudUnavailable, Reauthorize, SimsonOAuth, api_path, cloud_get, protect_refresh, storage_cipher
 from .protocol import API, DOMAIN, uuid_text
@@ -12,6 +18,11 @@ class SimsonConfigFlow(AbstractOAuth2FlowHandler, domain=DOMAIN):
     DOMAIN = DOMAIN
     VERSION = 1
     logger = logging.getLogger(__name__)
+
+    @staticmethod
+    @callback
+    def async_get_options_flow(config_entry):
+        return CompanionMappingFlow()
 
     async def async_step_user(self, user_input=None):
         try:
@@ -104,3 +115,85 @@ class SimsonConfigFlow(AbstractOAuth2FlowHandler, domain=DOMAIN):
             self.token = None
             return result
         return self.async_show_form(step_id="site", data_schema=vol.Schema({vol.Required("site_id"): vol.In(self.sites)}))
+
+
+def _choices(options, *, multiple=False):
+    return SelectSelector(SelectSelectorConfig(
+        options=[{"value": key, "label": name} for key, name in options.items()],
+        mode=SelectSelectorMode.DROPDOWN, multiple=multiple,
+    ))
+
+
+class CompanionMappingFlow(OptionsFlow):
+    """Assign an existing Simson extension to a Home Assistant user and their phones."""
+
+    @property
+    def site(self):
+        return getattr(self.config_entry, "runtime_data", None)
+
+    async def async_step_init(self, user_input=None):
+        site = self.site
+        if site is None:
+            return self.async_abort(reason="mapping_unavailable")
+        choices = {endpoint: f"{route['extension']} (saved assignment)" for endpoint, route in site.routes.items()}
+        for endpoint, phone in (site.inventory or {}).get("phones", {}).items():
+            if phone.enabled and not phone.gateway:
+                choices[endpoint] = f"{phone.extension} · {phone.name}"
+        if not choices:
+            return self.async_abort(reason="no_mapping_extensions")
+        if user_input and user_input["endpoint"] in choices:
+            self.endpoint = user_input["endpoint"]
+            if user_input["operation"] == "remove":
+                return await self.async_step_remove()
+            return await self.async_step_assign()
+        return self.async_show_form(step_id="init", data_schema=vol.Schema({
+            vol.Required("endpoint"): _choices(choices),
+            vol.Required("operation", default="assign"): _choices({"assign": "Assign or change", "remove": "Remove assignment"}),
+        }))
+
+    async def async_step_assign(self, user_input=None):
+        site = self.site
+        phone = ((site.inventory or {}).get("phones", {}).get(self.endpoint)) if site else None
+        if not phone or phone.gateway or not phone.enabled:
+            return self.async_abort(reason="no_mapping_extensions")
+        users = {key: user.name or "Home Assistant user" for key, user in (await active_users(self.hass)).items()}
+        if not users:
+            return self.async_abort(reason="no_mapping_users")
+        existing = site.routes.get(self.endpoint, {})
+        if user_input and user_input["user_id"] in users:
+            self.number = phone.extension
+            self.user = user_input["user_id"]
+            return await self.async_step_devices()
+        return self.async_show_form(step_id="assign", data_schema=vol.Schema({
+            vol.Required("user_id", description={"suggested_value": existing.get("user_id")}): _choices(users),
+        }))
+
+    async def async_step_devices(self, user_input=None):
+        site = self.site
+        if site is None:
+            return self.async_abort(reason="mapping_unavailable")
+        owned = {key: name for key, (name, _) in companion_devices(self.hass).get(self.user, {}).items()}
+        route = site.routes.get(self.endpoint, {})
+        errors = {}
+        if user_input is not None:
+            try:
+                await save_route(self.hass, site, self.endpoint, self.number, self.user,
+                                 user_input.get("devices", []), user_input["dashboard_path"])
+            except ValueError:
+                errors["base"] = "invalid_mapping"
+            else:
+                return self.async_create_entry(data=dict(site.entry.options))
+        schema = {vol.Required("dashboard_path", default=route.get("dashboard_path", "/lovelace")): str}
+        if owned:
+            selected = [key for key in route.get("devices", []) if route.get("user_id") == self.user and key in owned]
+            schema[vol.Optional("devices", default=selected)] = _choices(owned, multiple=True)
+        return self.async_show_form(step_id="devices", data_schema=vol.Schema(schema), errors=errors)
+
+    async def async_step_remove(self, user_input=None):
+        site = self.site
+        if site is None or self.endpoint not in site.routes:
+            return self.async_abort(reason="mapping_unavailable")
+        if user_input is not None:
+            await save_route(self.hass, site, self.endpoint, "", None, [], "")
+            return self.async_create_entry(data=dict(site.entry.options))
+        return self.async_show_form(step_id="remove", data_schema=vol.Schema({}))

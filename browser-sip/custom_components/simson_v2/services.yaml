@@ -21,3 +21,30 @@ trigger_automation:
       name: Event timestamp
       selector:
         text:
+call_user:
+  name: Ring an assigned user's SIP phone
+  description: Ring the selected Home Assistant user's mapped extension from a Simson phone in the same location.
+  fields:
+    site_id:
+      name: Simson location ID
+      required: true
+      selector:
+        text:
+    user_id:
+      name: Home Assistant user ID
+      required: true
+      selector:
+        text:
+    extension:
+      name: Assigned extension
+      description: Specify this when the user is assigned to multiple phones.
+      selector:
+        text:
+    from_extension:
+      name: Source extension
+      selector:
+        text:
+    video:
+      name: Video
+      selector:
+        boolean:

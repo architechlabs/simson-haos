@@ -48,4 +48,4 @@ class SimsonExtensionOnline(SimsonEntity, BinarySensorEntity):
     def extra_state_attributes(self) -> dict:
         ext = self.coordinator.data.extensions[self.extension_id]
         # simson_extension marks entities the dashboard card can discover.
-        return {"simson_extension": ext.extension, "name": ext.name, "enabled": ext.enabled, "gateway": ext.gateway, "endpoint_id": ext.id}
+        return {"simson_extension": ext.extension, "name": ext.name, "enabled": ext.enabled, "gateway": ext.gateway, "endpoint_id": ext.id, "config_entry_id": self.coordinator.config_entry.entry_id}

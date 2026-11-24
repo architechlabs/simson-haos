@@ -14,7 +14,7 @@ from .frontend import async_register_card
 from .oauth import SimsonOAuth2Implementation
 from .services import async_register_services
 
-PLATFORMS = ["binary_sensor", "sensor", "event", "switch", "button", "select"]
+PLATFORMS = ["binary_sensor", "sensor", "event", "button", "select"]
 
 
 async def async_setup(hass: HomeAssistant, config: ConfigType) -> bool:

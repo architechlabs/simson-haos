@@ -90,32 +90,39 @@ async def ws_set_route(hass, connection, msg):
         connection.send_error(msg["id"], "not_found", "Add this location under Simson V2 in Home Assistant first.")
         return
     try:
-        endpoint = uuid_text(msg["endpoint_id"])
-        path = dashboard_path(msg["dashboard_path"])
-        user = msg["user_id"]
-        if user is not None:
-            number = extension(msg["extension"])
-            users = await active_users(hass)
-            owned_devices = companion_devices(hass).get(user, {})
-            selected = list(dict.fromkeys(msg["devices"]))
-            if user not in users or any(device not in owned_devices for device in selected) or not selected:
-                raise ValueError
-        elif msg["devices"]:
-            raise ValueError
-        # No await between reading and writing the current config entry.
-        routes = dict(site.routes)
-        if user is None:
-            routes.pop(endpoint, None)
-        else:
-            if endpoint not in routes and len(routes) >= MAX_ROUTES:
-                raise ValueError
-            routes[endpoint] = {"extension": number, "user_id": user, "devices": selected, "dashboard_path": path}
-        hass.config_entries.async_update_entry(site.entry, options={**site.entry.options, "routes": routes})
-        async_dispatcher_send(hass, site.route_signal)
+        await save_route(hass, site, msg["endpoint_id"], msg["extension"], msg["user_id"], msg["devices"], msg["dashboard_path"])
     except ValueError:
-        connection.send_error(msg["id"], "invalid_route", "Select a user and their registered phones, and enter a local dashboard path.")
+        connection.send_error(msg["id"], "invalid_route", "Select an enabled extension, an active user and only their registered phones. Use a local dashboard path.")
         return
     connection.send_result(msg["id"], {"routes": route_data(site)})
+
+
+async def save_route(hass, site, endpoint, number, user, devices, path):
+    endpoint = uuid_text(endpoint)
+    if user is not None:
+        path = dashboard_path(path)
+        number = extension(number)
+        registered_users = await active_users(hass)
+        registered_devices = companion_devices(hass).get(user, {})
+        selected = list(dict.fromkeys(devices))
+        phone = (site.inventory or {}).get("phones", {}).get(endpoint)
+        if (phone is None or phone.gateway or not phone.enabled or phone.extension != number
+                or user not in registered_users or len(selected) > 16
+                or any(device not in registered_devices for device in selected)):
+            raise ValueError("Choose an enabled extension, an active user and only their Companion devices.")
+    elif devices:
+        raise ValueError("No devices can be retained when removing a mapping.")
+
+    # Do not yield between reading and updating the current entry options.
+    routes = dict(site.routes)
+    if user is None:
+        routes.pop(endpoint, None)
+    else:
+        if endpoint not in routes and len(routes) >= MAX_ROUTES:
+            raise ValueError("This location has reached its notification mapping limit.")
+        routes[endpoint] = {"extension": number, "user_id": user, "devices": selected, "dashboard_path": path}
+    hass.config_entries.async_update_entry(site.entry, options={**site.entry.options, "routes": routes})
+    async_dispatcher_send(hass, site.route_signal)
 
 
 @websocket_api.websocket_command({vol.Required("type"): f"{DOMAIN}/my_calls", **SITE})
@@ -154,7 +161,7 @@ async def ws_watch_pickup(hass, connection, msg):
             for event in site.live_calls():
                 if event["call_id"] == call_id and event["state"] == "ringing":
                     route = site.routes.get(event["endpoint_id"], {})
-                    if route.get("user_id") == connection.user.id:
+                    if route.get("user_id") == connection.user.id and route.get("extension") == event["extension"]:
                         return {key: event[key] for key in ("call_id", "extension", "caller")}
                     break
         return None

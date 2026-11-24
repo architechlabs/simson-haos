@@ -38,7 +38,6 @@ button:focus-visible,select:focus-visible,input:focus-visible{outline:3px solid 
 .history{margin:0;padding:0;list-style:none}.history li{display:flex;justify-content:space-between;gap:8px;padding:10px 0;border-block-end:1px solid var(--divider-color)}
 .error,.ok{padding:10px 14px;border-radius:12px;font-size:13px}
 .error{background:color-mix(in srgb,var(--error-color,#c0392b) 14%,transparent)}.ok{background:color-mix(in srgb,var(--success-color,#2e7d32) 16%,transparent)}
-dl{display:grid;grid-template-columns:auto 1fr;gap:6px 14px;margin:10px 0}dt{color:var(--secondary-text-color)}dd{margin:0;font-family:var(--code-font-family,monospace);user-select:all;overflow-wrap:anywhere}
 `;
 
 const el = (tag, attrs = {}, ...children) => {
@@ -62,25 +61,61 @@ class SimsonCardImpl extends HTMLElement {
     this._hass = null;
     this._busy = false;
     this._message = null;
-    this._created = null;
-    this._form = false;
     try { this._from = localStorage.getItem("simson.from") || ""; } catch { this._from = ""; }
     this._to = "";
     this._unmount = null;
     this._slot = null;
   }
 
-  setConfig(config) { this._config = config || {}; this._view = this._config.view || "combined"; this._render(); }
-  set hass(value) { this._hass = value; this._render(); }
+  setConfig(config) {
+    const next = config || {};
+    if (next.browser !== this._config.browser || next.view !== this._config.view) {
+      this._browserCard = null;
+      this._browserFailed = false;
+    }
+    this._config = next;
+    this._view = next.view || "combined";
+    this._render();
+  }
+  set hass(value) {
+    const first = !this._hass;
+    const previousStates = this._hass?.states;
+    this._hass = value;
+    if (this._browserCard) {
+      this._browserCard.hass = value;
+    } else if (first) {
+      this._render();
+    } else if (value?.states !== previousStates && !this._refreshFrame && this._hasPhoneControls()) {
+      this._refreshFrame = requestAnimationFrame(() => {
+        this._refreshFrame = 0;
+        if (this.isConnected) this._refreshPhoneInventory();
+      });
+    }
+  }
+
+  _hasPhoneControls() { return ["combined", "dialer", "phones"].includes(this._view); }
+
+  _refreshPhoneInventory() {
+    const phones = this._phones();
+    const changes = JSON.stringify(phones);
+    if (changes !== this._phoneInventory) this._render(phones);
+  }
   connectedCallback() { this._render(); }
-  disconnectedCallback() { this._unmount?.(); this._unmount = null; this._slot = null; }
+  disconnectedCallback() {
+    cancelAnimationFrame(this._refreshFrame);
+    this._refreshFrame = 0;
+    this._unmount?.();
+    this._unmount = null;
+    this._slot = null;
+  }
 
   // ---- discovery ----------------------------------------------------------
 
   _phones() {
     const states = this._hass?.states || {};
+    const location = this._config.config_entry_id;
     return Object.values(states)
-      .filter((state) => state.attributes?.simson_extension && state.entity_id.startsWith("binary_sensor."))
+      .filter((state) => state.attributes?.simson_extension && state.entity_id.startsWith("binary_sensor.") && (!location || state.attributes.config_entry_id === location))
       .map((state) => ({ number: String(state.attributes.simson_extension), name: state.attributes.name || "", gateway: !!state.attributes.gateway, enabled: state.attributes.enabled !== false, online: state.state === "on" ? true : state.state === "off" ? false : null }))
       .sort((a, b) => a.number.localeCompare(b.number, undefined, { numeric: true }));
   }
@@ -100,41 +135,78 @@ class SimsonCardImpl extends HTMLElement {
   // (and camera for video) right now, at the same time as the call starts.
   _placeCall(video) {
     return this._run(async () => {
-      if (window.simson) await window.simson.call(this._from, this._to, { video });
-      else await this._hass.callService("simson", "call", { from_extension: this._from, to_extension: this._to, ...(video ? { video: true } : {}) });
+      await window.simson.call(this._from, this._to, { video, config_entry_id: this._config.config_entry_id });
       this._message = { kind: "ok", text: `Calling ${this._to}. Both phones will ring.` };
-    });
-  }
-
-  _create(form) {
-    const name = form.querySelector("[name=name]").value.trim();
-    const extension = form.querySelector("[name=extension]").value.trim();
-    return this._run(async () => {
-      const result = await this._hass.callWS({ type: "call_service", domain: "simson", service: "create_extension", service_data: { name, extension, notify: false }, return_response: true });
-      this._created = result?.response || null;
-      this._form = false;
     });
   }
 
   // ---- rendering ----------------------------------------------------------
 
-  _render() {
+  _render(knownPhones) {
     if (!this._hass) return;
-    const phones = this._phones();
+    if (this._view === "browser" || this._config.browser && ["combined", "dialer"].includes(this._view)) {
+      this._renderBrowserPhone();
+      return;
+    }
+    const phones = knownPhones ?? (this._hasPhoneControls() ? this._phones() : []);
+    this._phoneInventory = JSON.stringify(phones);
     const callable = phones.filter((phone) => !phone.gateway && phone.enabled);
     if (!this._from || !callable.some((phone) => phone.number === this._from)) this._from = callable[0]?.number || "";
     const view = this._view;
     const parts = [];
-    const headings = { dialer: "Dialer", phones: "Phones", live: "Live call", add: "Add phone", history: "Call history" };
+    const headings = { dialer: "Dialer", phones: "Phones", live: "Live call", add: "Phone setup", history: "Call history" };
     if (headings[view]) parts.push(el("div", { class: "identity" }, this.brandImage?.(), el("h2", {}, this._config.title || headings[view])));
-    if (view === "combined") parts.push(this._header(phones), this._dialer(callable), this._phoneGrid(phones), this._live(), this._status(), this._createdBox(), this._addPhone());
+    if (view === "combined") parts.push(this._header(phones), this._dialer(callable), this._phoneGrid(phones), this._live(), this._status());
     else if (view === "dialer") parts.push(this._dialer(callable), this._status());
     else if (view === "phones") parts.push(this._phoneGrid(phones), this._status());
     else if (view === "live") parts.push(this._live());
     else if (view === "history") parts.push(this._history(), this._status());
-    else if (view === "add") parts.push(this._createdBox(), this._addPhone(true), this._status());
+    else if (view === "add") parts.push(el("p", { class: "note" }, "Manage SIP extensions in the Simson portal."));
     else parts.push(el("p", { class: "empty" }, `Unsupported Simson card view “${view}”.`));
     this.shadowRoot.replaceChildren(el("style", {}, STYLE), el("div", { class: "card" }, parts.filter(Boolean)));
+  }
+
+  _renderBrowserPhone() {
+    if (this._browserCard) {
+      this._browserCard.hass = this._hass;
+      return;
+    }
+    if (this._browserLoading || this._browserFailed) return;
+    if (!this._config.browser) {
+      this.shadowRoot.replaceChildren(el("style", {}, STYLE), el("p", { class: "empty" },
+        "Configure this card with a Simson browser extension and its secure SIP WebSocket."));
+      return;
+    }
+    void this._loadBrowserPhone();
+  }
+
+  async _loadBrowserPhone() {
+    const config = this._config.browser;
+    const path = new URL("./browser-sip/simson-call-card.js", import.meta.url);
+    if (this._browserFailures) path.searchParams.set("retry", Date.now());
+    this._browserLoading = true;
+    this.shadowRoot.replaceChildren(el("style", {}, STYLE), el("p", { class: "empty", role: "status" }, "Opening browser phone…"));
+    try {
+      if (!customElements.get("simson-v2-call-card")) await import(path.href);
+      if (config !== this._config.browser) return;
+      const card = document.createElement("simson-v2-call-card");
+      card.setConfig({ ...config, type: "custom:simson-v2-call-card" });
+      card.hass = this._hass;
+      this._browserCard = card;
+      this.shadowRoot.replaceChildren(card);
+    } catch (error) {
+      if (config !== this._config.browser) return;
+      this._browserFailed = true;
+      this._browserFailures = (this._browserFailures || 0) + 1;
+      const message = customElements.get("simson-v2-call-card") ? error.message :
+        "The browser phone did not load. Retry to download its files.";
+      this.shadowRoot.replaceChildren(el("style", {}, STYLE),
+        el("div", { class: "card" }, el("p", { role: "alert", class: "note" }, message),
+          el("button", { type: "button", class: "quiet", onclick: () => { this._browserFailed = false; this._renderBrowserPhone(); } }, "Retry")));
+    } finally {
+      this._browserLoading = false;
+      if (config !== this._config.browser && this.isConnected) this._render();
+    }
   }
 
   _header(phones) {
@@ -168,15 +240,17 @@ class SimsonCardImpl extends HTMLElement {
   }
 
   _dialer(callable) {
-    if (!callable.length) return el("p", { class: "empty" }, "No Simson phones yet. Finish setting up the integration, or add a phone.");
-    const disabled = this._busy || !this._from || !this._to || this._from === this._to;
-    return el("div", { class: "row" },
-      el("label", { class: "grow" }, "From", el("select", { "aria-label": "Call from", onchange: (e) => { this._from = e.target.value; try { localStorage.setItem("simson.from", this._from); } catch {} this._render(); } },
+    if (!callable.length) return el("p", { class: "empty" }, "No enabled phones for phone-to-phone calling. Manage phones in the Simson portal.");
+    const disabled = () => this._busy || !this._from || !/^[1-9][0-9]{1,7}$/.test(this._to) || this._from === this._to;
+    return el("form", { class: "row", onsubmit: (event) => { event.preventDefault(); if (!disabled()) void this._placeCall(false); } },
+      el("label", { class: "grow" }, "Ring this phone first", el("select", { "aria-label": "Call from", onchange: (e) => { this._from = e.target.value; try { localStorage.setItem("simson.from", this._from); } catch {} this._render(); } },
         callable.map((phone) => el("option", { value: phone.number, selected: phone.number === this._from }, `${phone.number} ${phone.name}`.trim())))),
-      el("label", { class: "grow" }, "To extension", el("input", { class: "num", value: this._to, inputmode: "numeric", placeholder: "1202", "aria-label": "Extension to call", oninput: (e) => { this._to = e.target.value.replace(/\D/g, ""); this._render(); const box = this.shadowRoot.querySelector("input.num"); box?.focus(); box?.setSelectionRange(this._to.length, this._to.length); } })),
+      el("label", { class: "grow" }, "To extension", el("input", { class: "num", value: this._to, inputmode: "numeric", maxlength: 8, placeholder: "1202", "aria-label": "Extension to call", oninput: (e) => { this._to = e.target.value.replace(/\D/g, "");
+        e.target.value = this._to;
+        for (const button of this.shadowRoot.querySelectorAll(".actions button")) button.disabled = disabled(); } })),
       el("div", { class: "actions" },
-        el("button", { disabled, onclick: () => this._placeCall(false) }, this._busy ? "Calling…" : "Call"),
-        this._config.video !== false && el("button", { class: "video", disabled, onclick: () => this._placeCall(true), "aria-label": "Start a video call" }, "Video")),
+        el("button", { type: "submit", disabled: disabled() }, this._busy ? "Calling…" : "Ring phones"),
+        this._config.video !== false && el("button", { type: "button", class: "video", disabled: disabled(), onclick: () => this._placeCall(true), "aria-label": "Start a video call" }, "Video")),
     );
   }
 
@@ -198,23 +272,7 @@ class SimsonCardImpl extends HTMLElement {
     return this._slot;
   }
 
-  _createdBox() {
-    if (!this._created) return null;
-    const c = this._created;
-    return el("div", { class: "ok", role: "status" },
-      el("strong", {}, `Phone ${c.extension} created. The password is shown only once.`),
-      el("dl", {}, [["Server", c.server], ["Port", c.port], ["Transport", c.transport], ["Username", c.username], ["Password", c.password]].filter(([, v]) => v != null).flatMap(([k, v]) => [el("dt", {}, k), el("dd", {}, String(v))])),
-      el("button", { class: "quiet", onclick: () => { this._created = null; this._render(); } }, "I have saved it"));
-  }
 
-  _addPhone(always = false) {
-    if (!this._form && !always) return el("div", { class: "row" }, el("button", { class: "quiet", onclick: () => { this._form = true; this._render(); } }, "Add a phone"));
-    return el("form", { class: "row", onsubmit: (e) => { e.preventDefault(); this._create(e.target); } },
-      el("label", { class: "grow" }, "Name", el("input", { name: "name", placeholder: "Kitchen", required: true, maxlength: 200, "aria-label": "Phone name" })),
-      el("label", {}, "Extension", el("input", { name: "extension", placeholder: "1204", inputmode: "numeric", pattern: "[1-9][0-9]{1,7}", required: true, "aria-label": "Extension number" })),
-      el("button", { type: "submit", disabled: this._busy }, "Create"),
-      !always && el("button", { type: "button", class: "quiet", onclick: () => { this._form = false; this._render(); } }, "Cancel"));
-  }
 }
 
 if (!customElements.get("simson-card-impl")) customElements.define("simson-card-impl", SimsonCardImpl);

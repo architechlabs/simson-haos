@@ -17,6 +17,7 @@ from .inventory import InventoryFeed
 from .protocol import DOMAIN
 from .runtime import Site
 from .transport import register
+from .user_calls import register_user_calls
 
 CARD_PATH = "/simson-v2"
 LOGGER = logging.getLogger(__name__)
@@ -40,6 +41,7 @@ async def async_setup(hass: HomeAssistant, config: ConfigType) -> bool:
     hass.data[DOMAIN] = {"sites": {}}
     register(hass)
     register_automation(hass)
+    register_user_calls(hass)
     return True
 
 

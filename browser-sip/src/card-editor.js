@@ -9,8 +9,8 @@ html.innerHTML = `
     form, label, .contact-list { display: grid; gap: 8px; }
     form { gap: 14px; }
     label, button { font: inherit; font-size: 14px; }
-    input:not([type="checkbox"]) { font: inherit; color: inherit; background: var(--card-background-color, #fff); border: 1px solid var(--divider-color, #a9adb4); border-radius: 6px; padding: 9px 10px; min-width: 0; }
-    input:focus-visible, button:focus-visible { outline: 2px solid var(--primary-color); outline-offset: 2px; }
+    select, input:not([type="checkbox"]) { font: inherit; color: inherit; background: var(--card-background-color, #fff); border: 1px solid var(--divider-color, #a9adb4); border-radius: 6px; padding: 9px 10px; min-width: 0; }
+    input:focus-visible, select:focus-visible, button:focus-visible { outline: 2px solid var(--primary-color); outline-offset: 2px; }
     button { justify-self: start; min-height: 40px; padding: 6px 12px; border: 1px solid var(--divider-color, #a9adb4); border-radius: 6px; background: var(--card-background-color, #fff); color: inherit; cursor: pointer; }
     p { margin: 0; font-size: 13px; line-height: 1.5; color: var(--secondary-text-color); }
     [role="alert"] { color: var(--error-color, #b42318); }
@@ -30,6 +30,7 @@ html.innerHTML = `
     <label>SIP realm<input name="realm" required autocomplete="off" autocapitalize="none" placeholder="office.sip.example.net"></label>
     <label>SIP WebSocket<input name="websocket" required autocomplete="off" autocapitalize="none" placeholder="wss://office.sip.example.net:7443"></label>
     <label>SIP extension<input name="extension" required inputmode="numeric" pattern="[1-9][0-9]{1,7}" autocomplete="off" placeholder="203"></label>
+    <label>Carrier access prefix<input name="gateway_prefix" maxlength="4" inputmode="tel" autocomplete="off" placeholder="Optional, e.g. *9"></label>
     <label>TURN relay<input name="relay" autocomplete="off" autocapitalize="none" placeholder="Optional"></label>
     <label>Simson location ID<input name="site_id" maxlength="36" autocomplete="off" placeholder="Optional for notification links"></label>
     <div>
@@ -54,7 +55,8 @@ html.innerHTML = `
 const contactRow = document.createElement("template");
 contactRow.innerHTML = `<div class="contact">
   <label>Name<input data-field="name" maxlength="80" autocomplete="off" placeholder="Front door"></label>
-  <label>Extension<input data-field="extension" required inputmode="numeric" pattern="[1-9][0-9]{1,7}" maxlength="8" autocomplete="off"></label>
+  <label>Call type<select data-field="mode"><option value="extension">SIP phone</option><option value="route">Node or route</option><option value="outside">Outside</option></select></label>
+  <label><span data-field="number-label">Extension</span><input data-field="extension" required inputmode="tel" maxlength="18" autocomplete="off"></label>
   <div class="contact-actions"><label><input data-field="video" type="checkbox"> Video calls</label><button type="button">Remove contact</button></div>
 </div>`;
 
@@ -95,7 +97,17 @@ export class SimsonCardEditor extends HTMLElement {
     row.querySelector('[data-field="name"]').value = contact.name ?? "";
     const number = row.querySelector('[data-field="extension"]');
     number.value = contact.extension ?? "";
-    row.querySelector('[data-field="video"]').checked = contact.video === true;
+    const mode = row.querySelector('[data-field="mode"]');
+    const video = row.querySelector('[data-field="video"]');
+    mode.value = contact.mode ?? "extension";
+    video.checked = contact.video === true;
+    const updateMode = () => {
+      row.querySelector('[data-field="number-label"]').textContent = { extension: "Extension", route: "Dial code", outside: "Phone number" }[mode.value];
+      video.disabled = mode.value === "outside";
+      if (video.disabled) video.checked = false;
+    };
+    mode.addEventListener("change", updateMode);
+    updateMode();
     row.querySelector("button").addEventListener("click", () => {
       const next = row.nextElementSibling ?? row.previousElementSibling;
       row.remove();
@@ -121,7 +133,8 @@ export class SimsonCardEditor extends HTMLElement {
         const extension = row.querySelector('[data-field="extension"]').value.trim();
         const name = row.querySelector('[data-field="name"]').value.trim();
         const video = row.querySelector('[data-field="video"]').checked;
-        return { extension, ...(name && { name }), ...(video && { video }) };
+        const mode = row.querySelector('[data-field="mode"]').value;
+        return { extension, ...(name && { name }), ...(video && { video }), ...(mode !== "extension" && { mode }) };
       });
       if (contacts.length) config.contacts = contacts;
       else delete config.contacts;

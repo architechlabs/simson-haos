@@ -1,4 +1,4 @@
-import { extension, readConfig } from "./config.js";
+import { dialDestination, readConfig } from "./config.js";
 import { idleSnapshot, joinSession, preparePhone } from "./session.js";
 import styles from "./call-card.css";
 
@@ -29,7 +29,13 @@ template.innerHTML = `
         <button class="primary" type="submit"><ha-icon icon="mdi:phone-check-outline"></ha-icon><span id="connect-label">Connect</span></button>
       </form>
       <form id="dial" hidden>
-        <label>Extension<input id="number" inputmode="numeric" pattern="[1-9][0-9]{1,7}" maxlength="8" required autocomplete="off" placeholder="e.g. 201"></label>
+        <div class="dial-fields">
+          <label>Call type<select id="dial-mode">
+            <option value="auto">Auto</option><option value="extension">SIP phone</option>
+            <option value="route">Node or route</option><option id="outside-mode" value="outside">Outside</option>
+          </select></label>
+          <label><span id="dial-label">Extension or route</span><input id="number" inputmode="tel" maxlength="18" required autocomplete="off" placeholder="e.g. 201"></label>
+        </div>
         <div class="actions">
           <button class="primary" type="submit"><ha-icon icon="mdi:phone"></ha-icon>Audio call</button>
           <button id="video" type="button"><ha-icon icon="mdi:video-outline"></ha-icon>Video call</button>
@@ -89,6 +95,7 @@ class SimsonCallCard extends HTMLElement {
     this.receive = (snapshot, shared) => this.render(snapshot, shared);
     this.el.login.addEventListener("submit", (event) => { event.preventDefault(); void this.connect(); });
     this.el.password.addEventListener("focus", preparePhone, { once: true });
+    this.el["dial-mode"].addEventListener("change", () => this.renderDialMode());
     this.el.dial.addEventListener("submit", (event) => { event.preventDefault(); void this.call(false); });
     this.el.video.addEventListener("click", () => void this.call(true));
     this.el.answer.addEventListener("click", () => void this.phone?.answer(false));
@@ -161,6 +168,9 @@ class SimsonCallCard extends HTMLElement {
     this.el.state.hidden = false;
     this.el["contacts-title"].hidden = this.constructor.view === "contacts";
     this.el["relay-settings"].hidden = !config.relay;
+    this.el["outside-mode"].disabled = !config.gatewayPrefix;
+    if (this.el["dial-mode"].value === "outside" && !config.gatewayPrefix) this.el["dial-mode"].value = "auto";
+    this.renderDialMode();
     const cards = config.contacts.map((contact) => {
       const button = document.createElement("button");
       button.type = "button";
@@ -170,7 +180,7 @@ class SimsonCallCard extends HTMLElement {
       name.textContent = contact.name;
       detail.textContent = `${contact.extension} · ${contact.video ? "Video" : "Audio"}`;
       button.append(name, detail);
-      button.addEventListener("click", () => void this.call(contact.video, contact.extension));
+      button.addEventListener("click", () => void this.call(contact.video, contact.extension, true));
       return button;
     });
     this.el.contacts.replaceChildren(...cards);
@@ -327,10 +337,25 @@ class SimsonCallCard extends HTMLElement {
     await this.binding.group.connect(password, iceServers, this.el.ring.checked);
   }
 
-  async call(video, destination = this.el.number.value.trim()) {
+  renderDialMode() {
+    const mode = this.el["dial-mode"].value;
+    const [label, placeholder] = {
+      auto: ["Extension or route", "e.g. 201"],
+      extension: ["SIP extension", "e.g. 201"],
+      route: ["Configured dial code", "e.g. *81"],
+      outside: ["Phone number", "Include country code if needed"],
+    }[mode];
+    this.el["dial-label"].textContent = label;
+    this.el.number.placeholder = placeholder;
+    this.el.video.hidden = mode === "outside";
+  }
+
+  async call(video, destination = this.el.number.value.trim(), contact = false) {
     try {
       if (!this.phone) return;
-      await this.phone.dial(extension(destination), video, this.binding.group.shareCamera);
+      const mode = this.el["dial-mode"].value;
+      const number = contact ? destination : dialDestination(destination, mode, this.config.gatewayPrefix);
+      await this.phone.dial(number, video && (contact || mode !== "outside"), this.binding.group.shareCamera);
     } catch (error) {
       this.binding?.group.report(error instanceof Error ? error.message : "Could not start the call.");
     }

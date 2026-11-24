@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { extension, readConfig } from "../src/config.js";
+import { dialDestination, extension, readConfig, sipDestination } from "../src/config.js";
 import { supportsVideo } from "../src/browser-phone.js";
 
 const config = {
@@ -45,4 +45,20 @@ test("only a negotiated nonzero video m-line enables the incoming video controls
   assert.ok(supportsVideo("v=0\r\nm=audio 9 UDP/TLS/RTP/SAVPF 0\r\nm=video 9 UDP/TLS/RTP/SAVPF 96\r\n"));
   assert.equal(supportsVideo("v=0\r\nm=video 0 UDP/TLS/RTP/SAVPF 96\r\n"), false);
   assert.equal(supportsVideo(undefined), false);
+});
+
+test("routes local dial codes and prefixed outside calls without accepting injected SIP addresses", () => {
+  assert.equal(dialDestination("201", "extension"), "201");
+  assert.equal(dialDestination("*81", "route"), "*81");
+  assert.equal(sipDestination(dialDestination("+15551234567", "outside", "*9")), "*9+15551234567");
+  assert.equal(sipDestination(dialDestination("00915551234567", "outside", "9")), "900915551234567");
+  for (const text of ["+15551234567", "201@example.test", "201;user=phone", "201?x=y", "201\r\n", "#100"]) {
+    assert.throws(() => sipDestination(text));
+  }
+  assert.throws(() => dialDestination("+15551234567", "outside"));
+  assert.throws(() => dialDestination("*81", "extension"));
+  assert.throws(() => dialDestination("+15551234567", "auto"));
+  const contacts = [{ name: "Delivery", extension: "+15551234567", mode: "outside" }];
+  assert.equal(readConfig({ ...config, gateway_prefix: "*9", contacts }).contacts[0].extension, "*9+15551234567");
+  assert.throws(() => readConfig({ ...config, gateway_prefix: "*9", contacts: [{ ...contacts[0], video: true }] }));
 });

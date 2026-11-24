@@ -49,19 +49,3 @@ def test_refuses_impossible_calls_with_a_readable_reason(source, target, message
 def test_refuses_calls_when_no_voice_service_is_active():
     with pytest.raises(resolve.ResolveError, match="voice service"):
         resolve.plan_call(workspace(node=None), "1201", "1202")
-
-
-def test_new_extension_validation():
-    ws = workspace()
-    assert resolve.validate_new_extension(ws, " 1204 ", " Kitchen ") == ("1204", "Kitchen")
-    for number, name, message in (("1201", "Dup", "already exists"), ("04", "X", "digits"), ("1204", "  ", "name"), ("1204", "x" * 201, "name")):
-        with pytest.raises(resolve.ResolveError, match=message):
-            resolve.validate_new_extension(ws, number, name)
-
-
-def test_phone_settings_include_the_password_only_when_given():
-    ws = workspace()
-    without = resolve.phone_settings(ws, "1204")
-    assert "password" not in without and without["server"] == "sip.example" and without["port"] == 5061 and without["username"] == "1204"
-    assert resolve.phone_settings(ws, "1204", "s3cret")["password"] == "s3cret"
-    assert resolve.phone_settings(model.Workspace(), "1204")["server"] is None

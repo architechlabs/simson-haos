@@ -59,7 +59,7 @@ const phoneTransport = {
   name: "phone",
   media: false,
   async call(hass, from, to, options) {
-    return hass.callWS({ type: "call_service", domain: "simson", service: "call", service_data: { from_extension: from, to_extension: to, ...(options?.video ? { video: true } : {}) }, return_response: true });
+    return hass.callWS({ type: "call_service", domain: "simson", service: "call", service_data: { from_extension: from, to_extension: to, ...(options?.config_entry_id ? { config_entry_id: options.config_entry_id } : {}), ...(options?.video ? { video: true } : {}) }, return_response: true });
   },
   async hangup(hass, callId) { return hass.callService("simson", "hangup", { call_id: callId }); },
 };

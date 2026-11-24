@@ -160,4 +160,8 @@ class ContactSensor(SiteSensor):
     @property
     def extra_state_attributes(self):
         route = self.site.routes.get(self.endpoint)
-        return {"endpoint_id": self.endpoint, "extension": route["extension"], "phones": len(route["devices"])} if route else None
+        if not route:
+            return None
+        devices = route["devices"]
+        return {"endpoint_id": self.endpoint, "extension": route["extension"],
+                "phone_selection": "explicit" if devices else "automatic", "phones": len(devices) if devices else None}

@@ -104,7 +104,7 @@ class CallDeliveryTest(unittest.IsolatedAsyncioTestCase):
             SimpleNamespace(
                 data={"site_id": SITE, "tenant_id": TENANT},
                 options={"routes": {ENDPOINT: {
-                    "user_id": USER, "devices": ["my-phone", "other-phone"], "dashboard_path": "/lovelace/calls",
+                    "extension": "1200", "user_id": USER, "devices": ["my-phone", "other-phone"], "dashboard_path": "/lovelace/calls",
                 }}},
                 async_create_background_task=task,
             ),
@@ -130,6 +130,18 @@ class CallDeliveryTest(unittest.IsolatedAsyncioTestCase):
         self.assertTrue(await self.site.ingest(protocol.parse_event(event(state="answered", revision=2), SITE)))
         await self.settle()
         self.assertEqual(self.mobile[-1][2]["message"], "clear_notification")
+
+    async def test_automatic_phone_selection_uses_only_currently_owned_devices(self):
+        self.site.entry.options["routes"][ENDPOINT]["devices"] = []
+        await self.site.ingest(protocol.parse_event(event(), SITE))
+        await self.settle()
+        self.assertEqual(self.mobile[0][2]["target"], ["private-destination-one"])
+
+    async def test_a_renumbered_extension_cannot_use_an_old_assignment(self):
+        self.site.entry.options["routes"][ENDPOINT]["extension"] = "1201"
+        await self.site.ingest(protocol.parse_event(event(), SITE))
+        await self.settle()
+        self.assertEqual(self.mobile, [])
 
     async def test_replayed_ringing_is_suppressed_when_call_has_ended(self):
         await self.site.ingest(protocol.parse_event(event(), SITE), replayed=True)

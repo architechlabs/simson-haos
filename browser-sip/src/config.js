@@ -18,6 +18,31 @@ export function extension(value) {
   return result;
 }
 
+const routePattern = /^(?:[1-9][0-9]{1,7}|\*[0-9]{2,13})$/;
+const gatewayPrefixPattern = /^(?:[0-9]{1,4}|\*[0-9]{1,3})$/;
+const outsidePattern = /^(?:\+[1-9][0-9]{3,14}|[0-9]{4,17})$/;
+const dialModes = new Set(["auto", "extension", "route", "outside"]);
+
+export function dialDestination(value, mode = "auto", gatewayPrefix = "") {
+  if (!dialModes.has(mode)) throw new Error("Choose a dial mode.");
+  const dial = typeof value === "string" ? value.trim() : String(value);
+  if (mode === "extension") return extension(dial);
+  if (mode === "outside") {
+    if (!gatewayPrefixPattern.test(gatewayPrefix)) throw new Error("Configure a carrier access prefix first.");
+    if (!outsidePattern.test(dial)) throw new Error("Enter a phone number, including + and country code when needed.");
+    return gatewayPrefix + dial;
+  }
+  if (!routePattern.test(dial)) throw new Error("Enter a SIP extension or a configured route code.");
+  return dial;
+}
+
+export function sipDestination(value) {
+  if (typeof value !== "string" || !/^(?:[1-9][0-9]{1,7}|\*[0-9]{2,13}|(?:[0-9]{1,4}|\*[0-9]{1,3})(?:\+[1-9][0-9]{3,14}|[0-9]{4,17}))$/.test(value)) {
+    throw new Error("Enter a valid SIP dial string.");
+  }
+  return value;
+}
+
 function label(value, fallback) {
   if (value === undefined) return fallback;
   if (typeof value !== "string" || value.trim().length === 0 || value.length > 80 || /[\u0000-\u001f\u007f]/.test(value)) {
@@ -55,11 +80,17 @@ export function readConfig(config, defaultTitle = "Simson calls") {
   if (relay !== "" && (!relayPort || Number(relayPort) < 1 || Number(relayPort) > 65535)) {
     throw new Error("Use a TURN or TURNS address with a port.");
   }
+  const gatewayPrefix = config.gateway_prefix ?? "";
+  if (gatewayPrefix !== "" && (typeof gatewayPrefix !== "string" || !gatewayPrefixPattern.test(gatewayPrefix))) {
+    throw new Error("Use the carrier access prefix configured in Simson.");
+  }
   const contacts = config.contacts ?? [];
   if (!Array.isArray(contacts) || contacts.length > 64) throw new Error("Add up to 64 contacts.");
   const seen = new Set([local]);
   const directory = contacts.map((item) => {
-    const number = extension(item?.extension);
+    const mode = item?.mode ?? "extension";
+    const number = dialDestination(item?.extension, mode, gatewayPrefix);
+    if (mode === "outside" && item.video) throw new Error("Outside contacts use audio only.");
     if (seen.has(number)) throw new Error("Each contact must have a unique extension.");
     seen.add(number);
     if (item.video !== undefined && typeof item.video !== "boolean") throw new Error("Set video to true or false.");
@@ -75,6 +106,7 @@ export function readConfig(config, defaultTitle = "Simson calls") {
     player: mediaEntity(config.media_player_entity, "media_player"),
     mediaPeer: config.media_extension === undefined ? "" : extension(config.media_extension),
     relay,
+    gatewayPrefix,
     title: label(config.title, defaultTitle),
     contacts: Object.freeze(directory),
   });

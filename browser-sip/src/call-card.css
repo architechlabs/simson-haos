@@ -54,3 +54,6 @@ details summary { cursor: pointer; padding: 9px 0; font-size: 13px; }
   header, section { padding: 13px; }
   .actions .primary { flex: 1 1 auto; }
 }
+
+.dial-fields { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 140px), 1fr)); gap: 8px; }
+.dial-fields select { box-sizing: border-box; width: 100%; min-height: 44px; padding: 0 10px; border: 1px solid var(--divider-color); border-radius: 8px; background: var(--card-background-color); color: var(--primary-text-color); font: inherit; }

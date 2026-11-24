@@ -1,5 +1,5 @@
 import { build } from "esbuild";
-import { copyFile, mkdir } from "node:fs/promises";
+import { copyFile, cp, mkdir } from "node:fs/promises";
 
 const component = "custom_components/simson_v2";
 const outdir = `${component}/www`;
@@ -25,3 +25,7 @@ await Promise.all([
   copyFile(`${component}/brand/icon.png`, `${outdir}/brand/icon.png`),
   copyFile(`${component}/brand/logo.png`, `${outdir}/brand/logo.png`),
 ]);
+
+// The Marketplace package includes the same browser phone bundle. Its SIP
+// signaling loads on demand, so telemetry-only dashboards keep the small loader.
+await cp(outdir, "../custom_components/simson/www/browser-sip", { recursive: true });

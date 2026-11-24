@@ -6,7 +6,7 @@
 2. Add `/simson-v2/simson-call-card.js` to dashboard resources as a JavaScript module.
 3. For account linking and notifications, provide the Home Assistant Core process with a Fernet key at `/share/simson-v2-private/oauth.key`. Use a private directory and mode `0400` for the file. Keep this directory out of unencrypted backups. The encryption key is separate from the configuration and the encrypted refresh token.
 4. In Home Assistant, open **Settings → Devices & services → Add integration → Simson V2**. Open the Simson sign-in prompt, approve **See your workspace** and **Receive live call events**, then return through My Home Assistant. Choose a workspace you administer and its Simson location.
-5. In the Simson portal, open that location's **Integrations → Home Assistant** panel. Authorize the instance with a Home Assistant administrator to enable the portal directory. Set a call notification assignment using the existing SIP extension, its Home Assistant user, that user's registered Companion phones and a local dashboard path such as `/lovelace/calls`.
+5. In Home Assistant, open **Simson V2 → Configure** to select the existing extension, Home Assistant user and Companion phones. An empty phone selection follows the user’s current Companion registrations. You can also use the Simson portal. Open that location's **Integrations → Home Assistant** panel. Authorize the instance with a Home Assistant administrator to enable the portal directory. Set a call notification assignment using the existing SIP extension, its Home Assistant user, that user's registered Companion phones and a local dashboard path such as `/lovelace/calls`.
 
 Home Assistant 2026.3 and newer display the bundled Simson branding in Devices & services. All six dashboard layouts have a branded preview in the card picker. Open the card editor to enter location and extension settings before connecting.
 
@@ -15,6 +15,9 @@ Card-only installations can continue using `simson_v2:` in `configuration.yaml` 
 Add one Simson config entry for each location you want on this Home Assistant installation. Each entry has its own scoped stream checkpoint, extension devices, assignments and state. The cloud feed reconnects automatically and runs while all dashboards are closed. Enable **Keep SIP connected between dashboard views** on a call card to retain its registration in that tab. Closing the browser or suspending the tab can end that registration. Companion notifications continue through the integration while Home Assistant stays online.
 
 ## Calls and notifications
+
+- For a direct audio or video call, open Home Assistant via HTTPS, connect the browser SIP extension and use the card’s dialer. Select **SIP phone**, **Node or route**, or **Outside**. The last mode is enabled when the card specifies the carrier access prefix configured for the source extension. Use the route dial code for a Simson phone group.
+- Use `simson_v2.call_user` with a location and Home Assistant user ID to ring a mapped extension from a source phone in an automation. If multiple phones are mapped to the user, include the extension. The standard Simson integration must link the same location for the phone-to-phone bridge.
 
 - Route to the assigned SIP extension using the location's existing call routing or automation. The assignment selects the Companion notification destination for a ringing event. It does not change the SIP dialplan.
 - The server streams site-scoped lifecycle events for persisted call intents. Older revisions, terminal replays, unrelated locations and unmapped endpoints are skipped. Notification routing uses the immutable endpoint ID and the device's current Home Assistant user registration.

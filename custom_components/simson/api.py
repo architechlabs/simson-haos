@@ -16,7 +16,6 @@ from typing import Any
 
 import aiohttp
 
-from .credential import OneTimeKey, credential_context
 from .sse import SseError, parse_sse
 
 TokenProvider = Callable[[], Awaitable[str]]
@@ -158,33 +157,6 @@ class SimsonApi:
         event = str(uuid.uuid4())
         body = {"event_id": event, "occurred_at": datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"), "expected_revision": revision}
         return await self._request("POST", f"/v1/tenants/{tenant}/sites/{site}/nodes/{node}/automations/{automation}/trigger", body=body, key=event)
-
-    # ---- extensions ---------------------------------------------------------
-
-    async def create_extension(self, tenant: str, site: str, display_name: str, extension: str, *, codecs: tuple[str, ...] = ("PCMU", "PCMA"), enabled: bool = True) -> dict:
-        body = {"display_name": display_name, "extension": extension, "codecs": list(codecs), "desired_enabled": enabled}
-        return await self._request("POST", f"/v1/tenants/{tenant}/sites/{site}/sip-endpoints", body=body)
-
-    async def update_extension(self, tenant: str, site: str, endpoint: str, *, display_name: str, extension: str, codecs: list[str], enabled: bool, revision: int) -> dict:
-        body = {"display_name": display_name, "extension": extension, "codecs": codecs, "desired_enabled": enabled, "expected_revision": revision}
-        return await self._request("PATCH", f"/v1/tenants/{tenant}/sites/{site}/sip-endpoints/{endpoint}", body=body)
-
-    async def delete_extension(self, tenant: str, site: str, endpoint: str, revision: int) -> dict:
-        return await self._request("DELETE", f"/v1/tenants/{tenant}/sites/{site}/sip-endpoints/{endpoint}", body={"expected_revision": revision})
-
-    async def issue_password(self, tenant: str, site: str, endpoint: str, credential_revision: int) -> str:
-        """Create a new SIP password and return it once, in clear text.
-
-        The server seals the password to a one-time key generated here, so it never
-        crosses the network or any log in the clear.
-        """
-        key = OneTimeKey.generate()
-        result = await self._request(
-            "PUT",
-            f"/v1/tenants/{tenant}/sites/{site}/sip-endpoints/{endpoint}/credential",
-            body={"public_key": key.public_key, "expected_revision": credential_revision},
-        )
-        return key.open(result, credential_context(tenant, site, endpoint))
 
     # ---- calls ------------------------------------------------------------
 

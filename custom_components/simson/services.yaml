@@ -35,53 +35,6 @@ hangup:
       selector:
         config_entry:
           integration: simson
-create_extension:
-  fields:
-    name:
-      required: true
-      example: Kitchen
-      selector:
-        text:
-    extension:
-      required: true
-      example: "1204"
-      selector:
-        text:
-    notify:
-      default: true
-      selector:
-        boolean:
-    config_entry_id:
-      selector:
-        config_entry:
-          integration: simson
-reset_extension_password:
-  fields:
-    extension:
-      required: true
-      example: "1204"
-      selector:
-        text:
-    notify:
-      default: true
-      selector:
-        boolean:
-    config_entry_id:
-      selector:
-        config_entry:
-          integration: simson
-delete_extension:
-  fields:
-    extension:
-      required: true
-      example: "1204"
-      selector:
-        text:
-    config_entry_id:
-      selector:
-        config_entry:
-          integration: simson
-
 call_extension:
   fields:
     to_extension:
@@ -149,17 +102,10 @@ get_call_presets:
       selector:
         config_entry:
           integration: simson
-set_extension_enabled:
+get_targets:
+  name: Get Simson call targets
+  description: List enabled extensions, configured phone groups and callable presets at one location.
   fields:
-    extension:
-      required: true
-      example: "1201"
-      selector:
-        text:
-    enabled:
-      required: true
-      selector:
-        boolean:
     config_entry_id:
       selector:
         config_entry:

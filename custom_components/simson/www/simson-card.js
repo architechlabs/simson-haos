@@ -199,12 +199,13 @@ class SimsonCard extends HTMLElement {
 
 // One card for everything, plus focused cards that can be placed anywhere.
 const CARDS = [
-  ["simson-card", "combined", "Simson", "mdi:phone-in-talk-outline", "Dial, check registration and add phones."],
-  ["simson-relay-card", "combined", "Simson (compatibility)", "mdi:phone-in-talk-outline", "Dial, check registration and add phones."],
+  ["simson-card", "combined", "Simson", "mdi:phone-in-talk-outline", "Ring phones or use a configured browser extension."],
+  ["simson-relay-card", "combined", "Simson (compatibility)", "mdi:phone-in-talk-outline", "Ring phones or use a configured browser extension."],
   ["simson-dialer-card", "dialer", "Simson dialer", "mdi:dialpad", "Dial an extension for an audio or video call."],
   ["simson-phones-card", "phones", "Simson phones", "mdi:phone-check-outline", "See phone registration and select a destination."],
   ["simson-live-call-card", "live", "Simson live call", "mdi:phone-outline", "See and control the call in progress."],
-  ["simson-add-phone-card", "add", "Simson add phone", "mdi:phone-plus-outline", "Create a phone and see its settings once."],
+  ["simson-add-phone-card", "add", "Simson phone setup", "mdi:phone-outline", "Manage SIP extensions in the Simson portal."],
+  ["simson-browser-phone-card", "browser", "Simson browser phone", "mdi:headset", "Talk and answer on this device over WebRTC."],
   ["simson-history-card", "history", "Simson call history", "mdi:phone-log", "See recent calls and durations."],
   ["simson-dial-card", "dialer", "Simson dial", "mdi:dialpad", "Dial an extension for an audio or video call."],
 ];
@@ -217,7 +218,7 @@ for (const [name, view, title, icon, description] of CARDS) {
       static getStubConfig() { return { type: `custom:${name}`, view }; }
     });
   }
-  if (!["simson-relay-card", "simson-dial-card"].includes(name) && !window.customCards.some((card) => card.type === name)) {
+  if (!["simson-relay-card", "simson-dial-card", "simson-add-phone-card"].includes(name) && !window.customCards.some((card) => card.type === name)) {
     window.customCards.push({ type: name, name: title, description, preview: true });
   }
 }

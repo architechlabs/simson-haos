@@ -13,7 +13,6 @@ CLIENT_ID = "home-assistant"
 
 SCOPES = (
     "workspace.read",
-    "extensions.manage",
     "calls.read",
     "calls.control",
     "automations.run",
@@ -53,8 +52,4 @@ SERVICE_GET_HISTORY = "get_call_history"
 SERVICE_GET_EXTENSIONS = "get_extensions"
 SERVICE_GET_NUMBERS = "get_numbers"
 SERVICE_GET_PRESETS = "get_call_presets"
-SERVICE_SET_ENABLED = "set_extension_enabled"
 SERVICE_HANGUP = "hangup"
-SERVICE_CREATE_EXTENSION = "create_extension"
-SERVICE_DELETE_EXTENSION = "delete_extension"
-SERVICE_RESET_PASSWORD = "reset_extension_password"

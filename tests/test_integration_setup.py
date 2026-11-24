@@ -21,6 +21,11 @@ async def test_saved_location_loads_and_dispatches_call_and_refresh_listeners(tm
     hass = HomeAssistant(str(tmp_path))
     hass.config_entries = ConfigEntries(hass, {})
     await hass.config_entries.async_initialize()
+    await simson.async_register_services(hass)
+    obsolete = ("create_extension", "reset_extension_password", "delete_extension", "set_extension_enabled")
+    assert not any(hass.services.has_service(DOMAIN, service) for service in obsolete)
+    assert hass.services.has_service(DOMAIN, "call")
+    assert hass.services.has_service(DOMAIN, "get_targets")
     entry = ConfigEntry(
         domain=DOMAIN,
         title="Fixture workspace · office",

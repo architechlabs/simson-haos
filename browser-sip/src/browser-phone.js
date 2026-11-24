@@ -1,5 +1,5 @@
 import { Invitation, Inviter, Registerer, RegistererState, SessionState, UserAgent, Web } from "sip.js";
-import { extension } from "./config.js";
+import { sipDestination } from "./config.js";
 
 const retryDelays = [1_000, 2_000, 4_000, 8_000, 16_000, 30_000];
 const audioConstraints = { echoCancellation: true, noiseSuppression: true, autoGainControl: true };
@@ -211,7 +211,7 @@ export class BrowserPhone {
 
   async dial(number, video, camera) {
     if (this.connection !== "ready" || this.call) return;
-    const destination = extension(number);
+    const destination = sipDestination(number);
     if (destination === this.config.extension) throw new Error("Choose a different extension.");
     if (video && !browserHasH264()) throw new Error("This browser does not offer H.264 video. Try an audio call.");
     const target = UserAgent.makeURI(`sip:${destination}@${this.config.realm}`);

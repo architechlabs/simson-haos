@@ -74,11 +74,6 @@
         }
       }
     },
-    "switch": {
-      "extension_enabled": {
-        "name": "Enabled"
-      }
-    },
     "button": {
       "call_extension": {
         "name": "Call"
@@ -127,60 +122,6 @@
         "call_id": {
           "name": "Call ID",
           "description": "The call to end."
-        },
-        "config_entry_id": {
-          "name": "Location",
-          "description": "Only needed when several Simson locations are connected."
-        }
-      }
-    },
-    "create_extension": {
-      "name": "Create phone",
-      "description": "Add a SIP phone extension and get its one-time password.",
-      "fields": {
-        "name": {
-          "name": "Name",
-          "description": "What the phone is called."
-        },
-        "extension": {
-          "name": "Extension",
-          "description": "2 to 8 digits, not starting with 0."
-        },
-        "notify": {
-          "name": "Show details",
-          "description": "Show the phone settings and password in a notification."
-        },
-        "config_entry_id": {
-          "name": "Location",
-          "description": "Only needed when several Simson locations are connected."
-        }
-      }
-    },
-    "reset_extension_password": {
-      "name": "Reset phone password",
-      "description": "Create a new password for a phone. The old one stops working.",
-      "fields": {
-        "extension": {
-          "name": "Extension",
-          "description": "The phone to reset."
-        },
-        "notify": {
-          "name": "Show details",
-          "description": "Show the new password in a notification."
-        },
-        "config_entry_id": {
-          "name": "Location",
-          "description": "Only needed when several Simson locations are connected."
-        }
-      }
-    },
-    "delete_extension": {
-      "name": "Delete phone",
-      "description": "Remove a phone extension.",
-      "fields": {
-        "extension": {
-          "name": "Extension",
-          "description": "The phone to remove."
         },
         "config_entry_id": {
           "name": "Location",
@@ -266,24 +207,6 @@
       "name": "Get call presets",
       "description": "Returns the saved call presets.",
       "fields": {
-        "config_entry_id": {
-          "name": "Location",
-          "description": "Only needed when more than one Simson location is set up."
-        }
-      }
-    },
-    "set_extension_enabled": {
-      "name": "Turn a phone on or off",
-      "description": "Enables or disables a phone. A disabled phone cannot register or call.",
-      "fields": {
-        "extension": {
-          "name": "Extension",
-          "description": "Extension number or phone name."
-        },
-        "enabled": {
-          "name": "Enabled",
-          "description": "On lets the phone register and call."
-        },
         "config_entry_id": {
           "name": "Location",
           "description": "Only needed when more than one Simson location is set up."
