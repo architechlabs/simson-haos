@@ -56,7 +56,7 @@ class SimsonCallButton(SimsonEntity, ButtonEntity):
         data = self.coordinator.data
         target = data.extensions[self.extension_id]
         try:
-            source = default_caller(data, self.coordinator.default_extension)
+            source = default_caller(data, self.coordinator.default_extension, exclude_id=target.id)
             node, source_id, target_id = plan_call(data, source, target.extension)
             await self.coordinator.api.start_call(self.coordinator.tenant_id, self.coordinator.site_id, node, source_id, target_id)
         except (ResolveError, SimsonError) as error:

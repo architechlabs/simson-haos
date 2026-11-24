@@ -40,12 +40,18 @@ def plan_call(workspace: Workspace, from_extension: str, to_extension: str) -> t
     return workspace.media_node_id, source.id, target.id
 
 
-def default_caller(workspace: Workspace, preferred: str | None = None) -> str:
+def default_caller(workspace: Workspace, preferred: str | None = None, *, exclude_id: str | None = None) -> str:
     """The phone calls come from when a script does not say: the chosen one, else the first usable."""
-    usable = sorted((ext for ext in workspace.extensions.values() if ext.enabled and not ext.gateway), key=lambda ext: (ext.online is not True, len(ext.extension), ext.extension))
+    usable = sorted(
+        (ext for ext in workspace.extensions.values()
+         if ext.enabled and not ext.gateway and ext.id != exclude_id and (not workspace.nodes or ext.node_id)),
+        key=lambda ext: (ext.online is not True, len(ext.extension), ext.extension),
+    )
     if preferred and any(ext.extension == str(preferred) for ext in usable):
         return str(preferred)
     if not usable:
+        if exclude_id:
+            raise ResolveError("This button needs another enabled phone at the same location to ring first.")
         raise ResolveError("There is no enabled phone to call from. Enable a phone in Simson first.")
     return usable[0].extension
 
