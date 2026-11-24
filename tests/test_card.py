@@ -30,6 +30,7 @@ HARNESS = """<!doctype html><meta charset=utf-8><body>
     callWS: async (message) => {
       window.calls.push(["ws", message]);
       if (window.failCalls) throw new Error("Extension 1202 is turned off.");
+      if (message.service === "get_call_history") return { response: { calls: [{ phase: "ended", started_at: "2026-11-20T10:00:00Z", answered: true, duration_seconds: 42 }] } };
       return message.service === "create_extension"
         ? { response: { extension: "1204", username: "1204", server: "sip.example", port: 5061, transport: "tls", password: "one-time-secret" } }
         : { response: { call_id: "new-call", state: "queued" } };
@@ -158,13 +159,51 @@ def test_picker_previews_have_branding_without_mounting_the_call_interface(site,
       }
       return types;
     }""")
-    assert len(visible_cards) == 5
-    assert page.locator(".simson-preview").count() == 5
+    assert len(visible_cards) == 6
+    assert page.locator(".simson-preview").count() == 6
     assert page.locator("simson-card-impl").count() == 0
-    assert page.get_by_alt_text("Simson by Architech Labs").count() == 5
-    assert len(set(page.locator(".simson-preview ha-icon").evaluate_all("icons => icons.map(icon => icon.getAttribute('icon'))"))) == 5
+    assert page.get_by_alt_text("Simson by Architech Labs").count() == 6
+    assert len(set(page.locator(".simson-preview ha-icon").evaluate_all("icons => icons.map(icon => icon.getAttribute('icon'))"))) == 6
     assert page.evaluate("window.calls.length") == 0
     assert page.evaluate("window.media.requests.length") == 0
+    assert not page.errors, page.errors
+
+
+def test_module_failures_recover_on_mobile_without_reloading(site, page):
+    page.set_viewport_size({"width": 375, "height": 720})
+    page.add_init_script("Storage.prototype.getItem = () => { throw new DOMException('blocked', 'SecurityError'); };")
+    attempts = {"core": [], "runtime": []}
+    broken = True
+
+    def handle(module):
+        def route_module(route):
+            attempts[module].append(route.request.url)
+            if broken:
+                route.fulfill(status=503, content_type="text/plain", body="Temporary fixture failure")
+            else:
+                route.continue_()
+        return route_module
+
+    page.route("**/simson-card-core.js*", handle("core"))
+    page.route("**/simson-runtime.js*", handle("runtime"))
+    page.goto(f"{site}/harness.html?cards=simson-card")
+    retry = page.get_by_role("button", name="Retry")
+    retry.wait_for()
+    broken = False
+    if retry.is_visible():
+        retry.click()
+    card = impl_ready(page)
+    assert card.get_by_label("Extension to call").is_visible()
+    page.wait_for_function("window.__subs.simson_call_event?.length === 1")
+    assert all(len(set(urls)) >= 2 and any("retry=" in url for url in urls) for urls in attempts.values())
+
+
+def test_existing_history_card_uses_the_read_only_history_action(site, page):
+    open_page(page, site, cards="simson-history-card")
+    card = impl_ready(page, "simson-history-card")
+    card.get_by_role("button", name="Load recent calls").click()
+    card.get_by_text("Answered · 42s").wait_for()
+    assert page.evaluate("window.calls.map(entry => entry[1]?.service)") == ["get_call_history"]
     assert not page.errors, page.errors
 
 
@@ -297,5 +336,5 @@ def test_a_failed_download_shows_a_retry_message_not_a_configuration_error(site,
     page.route("**/simson-card-core.js*", lambda route: route.fulfill(status=500, body="nope"))
     page.goto(f"{site}/harness.html?cards=simson-card")
     page.wait_for_function("window.ready === true")
-    page.wait_for_function("() => document.querySelector('simson-card').shadowRoot.textContent.includes('Reconnecting')", timeout=6000)
+    page.get_by_role("button", name="Retry").wait_for(timeout=6000)
     assert "Configuration error" not in page.locator("simson-card").evaluate("(host) => host.shadowRoot.textContent")

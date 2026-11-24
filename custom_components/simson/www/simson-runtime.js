@@ -14,8 +14,6 @@
 // DOM events on window: simson:incoming, simson:answered, simson:ended,
 // simson:missed. Each carries the call in event.detail.
 
-import { brandImage } from "./simson-brand.js";
-
 const SETTINGS_KEY = "simson.settings";
 const LIVE = ["requesting", "ringing", "active"];
 const defaultSettings = { overlay: true, position: "bottom-right", sound: false };
@@ -72,7 +70,7 @@ class Manager {
     this.calls = new Map();
     this.transports = [phoneTransport];
     this.transport = phoneTransport;
-    this.hass = null;
+    this._connection = null;
     this.localStream = null;
     this.mediaError = "";
     this._dismissed = new Set();
@@ -80,33 +78,46 @@ class Manager {
     this._timer = null;
     this._unsubs = [];
     this._views = new Set();
+    const resume = () => { if (document.visibilityState !== "hidden") this._start(); };
+    window.addEventListener("online", resume);
+    document.addEventListener("visibilitychange", resume);
     this._start();
   }
 
   // ---- connection to Home Assistant --------------------------------------
 
-  _hass() { return this.hass || document.querySelector("home-assistant")?.hass || null; }
+  _hass() { return document.querySelector("home-assistant")?.hass || null; }
 
   _start() {
-    let tries = 0;
-    const wait = setInterval(() => {
-      const hass = this._hass();
-      if (hass?.connection) {
-        clearInterval(wait);
-        this.hass = hass;
-        this._subscribe(hass);
-      } else if (++tries > 100) clearInterval(wait); // give up quietly after ~20 s
-    }, 200);
+    clearTimeout(this._attachTimer);
+    const hass = this._hass();
+    if (!hass?.connection) {
+      this._attachTimer = setTimeout(() => this._start(), document.visibilityState === "hidden" ? 2000 : 400);
+      return;
+    }
+    if (this._connection === hass.connection) return;
+    for (const unsubscribe of this._unsubs.splice(0)) void Promise.resolve(unsubscribe()).catch(() => {});
+    this._connection = hass.connection;
+    void this._subscribe(hass.connection);
   }
 
-  async _subscribe(hass) {
+  async _subscribe(connection) {
+    const subscriptions = [];
     try {
-      this._unsubs.push(await hass.connection.subscribeEvents((event) => this._onBus(event.data || {}), "simson_call_event"));
-      this._unsubs.push(await hass.connection.subscribeEvents((event) => { if (this._isOurs(event.data?.entity_id)) this._refresh(); }, "state_changed"));
+      subscriptions.push(await connection.subscribeEvents((event) => this._onBus(event.data || {}), "simson_call_event"));
+      subscriptions.push(await connection.subscribeEvents((event) => { if (this._isOurs(event.data?.entity_id)) this._refresh(); }, "state_changed"));
+      if (this._connection !== connection) return;
+      this._unsubs = subscriptions.splice(0);
+      this._refresh();
     } catch (error) {
       console.warn("[Simson] live updates are unavailable", error);
+      if (this._connection === connection) {
+        this._connection = null;
+        this._attachTimer = setTimeout(() => this._start(), 2500);
+      }
+    } finally {
+      for (const unsubscribe of subscriptions) void Promise.resolve(unsubscribe()).catch(() => {});
     }
-    this._refresh();
   }
 
   _isOurs(entityId) {
@@ -317,7 +328,8 @@ class CallView extends HTMLElement {
     if (active) { const time = document.createElement("span"); time.className = "timer"; time.textContent = elapsed(call); meta.append("Connected \u00b7 ", time); }
     else meta.textContent = `Ringing since ${new Date(call.started_at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}`;
     who.append(title, meta);
-    head.append(avatar, who, brandImage());
+    head.append(avatar, who);
+    if (m.brandImage) head.append(m.brandImage());
     const media = document.createElement("div");
     media.className = `media${m.transport.media ? " on" : ""}`;
     const row = document.createElement("div");

@@ -4,8 +4,6 @@
 // belong to the global runtime (window.simson), so they keep working on any
 // dashboard, panel or custom page. The card only asks for them.
 
-import { brandImage } from "./simson-brand.js";
-
 const STYLE = `
 :host{display:block}
 *{box-sizing:border-box}
@@ -37,6 +35,7 @@ button:focus-visible,select:focus-visible,input:focus-visible{outline:3px solid 
 .dot.on{background:var(--success-color,#2e7d32);box-shadow:0 0 0 4px color-mix(in srgb,var(--success-color,#2e7d32) 22%,transparent)}.dot.off{background:var(--error-color,#c0392b)}
 .empty{margin:0;padding:18px;border-radius:14px;text-align:center;color:var(--secondary-text-color);background:var(--secondary-background-color)}
 .note{margin:0;font-size:13px;color:var(--secondary-text-color)}
+.history{margin:0;padding:0;list-style:none}.history li{display:flex;justify-content:space-between;gap:8px;padding:10px 0;border-block-end:1px solid var(--divider-color)}
 .error,.ok{padding:10px 14px;border-radius:12px;font-size:13px}
 .error{background:color-mix(in srgb,var(--error-color,#c0392b) 14%,transparent)}.ok{background:color-mix(in srgb,var(--success-color,#2e7d32) 16%,transparent)}
 dl{display:grid;grid-template-columns:auto 1fr;gap:6px 14px;margin:10px 0}dt{color:var(--secondary-text-color)}dd{margin:0;font-family:var(--code-font-family,monospace);user-select:all;overflow-wrap:anywhere}
@@ -65,7 +64,7 @@ class SimsonCardImpl extends HTMLElement {
     this._message = null;
     this._created = null;
     this._form = false;
-    this._from = localStorage.getItem("simson.from") || "";
+    try { this._from = localStorage.getItem("simson.from") || ""; } catch { this._from = ""; }
     this._to = "";
     this._unmount = null;
     this._slot = null;
@@ -73,6 +72,7 @@ class SimsonCardImpl extends HTMLElement {
 
   setConfig(config) { this._config = config || {}; this._view = this._config.view || "combined"; this._render(); }
   set hass(value) { this._hass = value; this._render(); }
+  connectedCallback() { this._render(); }
   disconnectedCallback() { this._unmount?.(); this._unmount = null; this._slot = null; }
 
   // ---- discovery ----------------------------------------------------------
@@ -125,20 +125,21 @@ class SimsonCardImpl extends HTMLElement {
     if (!this._from || !callable.some((phone) => phone.number === this._from)) this._from = callable[0]?.number || "";
     const view = this._view;
     const parts = [];
-    const headings = { dialer: "Dialer", phones: "Phones", live: "Live call", add: "Add phone" };
-    if (headings[view]) parts.push(el("div", { class: "identity" }, brandImage(), el("h2", {}, this._config.title || headings[view])));
+    const headings = { dialer: "Dialer", phones: "Phones", live: "Live call", add: "Add phone", history: "Call history" };
+    if (headings[view]) parts.push(el("div", { class: "identity" }, this.brandImage?.(), el("h2", {}, this._config.title || headings[view])));
     if (view === "combined") parts.push(this._header(phones), this._dialer(callable), this._phoneGrid(phones), this._live(), this._status(), this._createdBox(), this._addPhone());
     else if (view === "dialer") parts.push(this._dialer(callable), this._status());
     else if (view === "phones") parts.push(this._phoneGrid(phones), this._status());
     else if (view === "live") parts.push(this._live());
+    else if (view === "history") parts.push(this._history(), this._status());
     else if (view === "add") parts.push(this._createdBox(), this._addPhone(true), this._status());
-    else parts.push(el("p", { class: "empty" }, `Unknown view “${view}”. Use combined, dialer, phones, live or add.`));
+    else parts.push(el("p", { class: "empty" }, `Unsupported Simson card view “${view}”.`));
     this.shadowRoot.replaceChildren(el("style", {}, STYLE), el("div", { class: "card" }, parts.filter(Boolean)));
   }
 
   _header(phones) {
     const online = phones.filter((phone) => phone.online).length;
-    const identity = this._config.title ? el("div", { class: "identity" }, brandImage(), el("h2", {}, this._config.title)) : brandImage("wordmark");
+    const identity = this._config.title ? el("div", { class: "identity" }, this.brandImage?.(), el("h2", {}, this._config.title)) : this.brandImage?.("wordmark") ?? el("h2", {}, "Simson");
     return el("div", { class: "top" }, identity, phones.length > 0 && el("span", { class: "pill" }, `${online} online`));
   }
 
@@ -146,11 +147,31 @@ class SimsonCardImpl extends HTMLElement {
     return this._message && el("div", { class: this._message.kind, role: this._message.kind === "error" ? "alert" : "status" }, this._message.text);
   }
 
+  _history() {
+    const refresh = () => this._run(async () => {
+      const { config_entry_id } = this._config;
+      const { response } = await this._hass.callWS({ type: "call_service", domain: "simson", service: "get_call_history",
+        service_data: { limit: 25, ...(config_entry_id ? { config_entry_id } : {}) }, return_response: true });
+      if (!Array.isArray(response?.calls)) throw new Error("Call history is temporarily unavailable.");
+      this._historyRows = response.calls;
+    });
+    const rows = this._historyRows;
+    return el("div", {}, el("button", { class: "quiet", disabled: this._busy, onclick: refresh },
+      this._busy ? "Loading…" : rows ? "Refresh history" : "Load recent calls"),
+    rows?.length ? el("ul", { class: "history" }, rows.map((call) => {
+      const timestamp = Date.parse(call.started_at);
+      const time = Number.isFinite(timestamp) ? new Date(timestamp).toLocaleString() : "Time unavailable";
+      const duration = Math.max(0, Number(call.duration_seconds) || 0);
+      const status = call.phase === "ended" ? (call.answered ? "Answered" : "Missed") : call.phase === "active" ? "In call" : "Ringing";
+      return el("li", {}, el("span", {}, time), el("span", {}, `${status} · ${duration}s`));
+    })) : rows ? el("p", { class: "note" }, "No recent calls.") : null);
+  }
+
   _dialer(callable) {
     if (!callable.length) return el("p", { class: "empty" }, "No Simson phones yet. Finish setting up the integration, or add a phone.");
     const disabled = this._busy || !this._from || !this._to || this._from === this._to;
     return el("div", { class: "row" },
-      el("label", { class: "grow" }, "From", el("select", { "aria-label": "Call from", onchange: (e) => { this._from = e.target.value; localStorage.setItem("simson.from", this._from); this._render(); } },
+      el("label", { class: "grow" }, "From", el("select", { "aria-label": "Call from", onchange: (e) => { this._from = e.target.value; try { localStorage.setItem("simson.from", this._from); } catch {} this._render(); } },
         callable.map((phone) => el("option", { value: phone.number, selected: phone.number === this._from }, `${phone.number} ${phone.name}`.trim())))),
       el("label", { class: "grow" }, "To extension", el("input", { class: "num", value: this._to, inputmode: "numeric", placeholder: "1202", "aria-label": "Extension to call", oninput: (e) => { this._to = e.target.value.replace(/\D/g, ""); this._render(); const box = this.shadowRoot.querySelector("input.num"); box?.focus(); box?.setSelectionRange(this._to.length, this._to.length); } })),
       el("div", { class: "actions" },
@@ -197,4 +218,8 @@ class SimsonCardImpl extends HTMLElement {
 }
 
 if (!customElements.get("simson-card-impl")) customElements.define("simson-card-impl", SimsonCardImpl);
-export const createCard = () => document.createElement("simson-card-impl");
+export const createCard = (brandImage) => {
+  const card = document.createElement("simson-card-impl");
+  card.brandImage = brandImage;
+  return card;
+};

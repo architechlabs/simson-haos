@@ -4,16 +4,33 @@
 //  1. defines every card element immediately, so Home Assistant never renders
 //     "Configuration error" while a card downloads;
 //  2. installs window.simson, the call API for scripts and custom dashboards;
-//  3. starts downloading the card interface and the call runtime in parallel.
+//  3. starts the call runtime and loads dashboard controls only when needed.
 // Everything heavy lives in simson-card-core.js (cards) and simson-runtime.js
 // (global call layer). Keep this file small and dependency free.
-import { brandImage } from "./simson-brand.js";
+const VERSION = "0.1.4";
 
-const VERSION = "0.1.3";
-const base = (name) => new URL(`./${name}?v=${VERSION}`, import.meta.url).href;
+function brandImage(variant = "mark") {
+  const image = document.createElement("img");
+  const wordmark = variant === "wordmark";
+  image.className = wordmark ? "simson-wordmark" : "simson-mark";
+  image.src = new URL(wordmark ? "brand/logo.png" : "brand/icon.png", import.meta.url).href;
+  image.alt = wordmark ? "Simson by Architech Labs" : "";
+  image.width = wordmark ? 132 : 34;
+  image.height = wordmark ? 32 : 34;
+  return image;
+}
+
 const retrying = (name) => {
   let promise;
-  return () => (promise ||= import(base(name)).catch((error) => { promise = null; throw error; }));
+  let attempt = 0;
+  return () => {
+    if (promise) return promise;
+    const url = new URL(`./${name}?v=${VERSION}`, import.meta.url);
+    // Browsers remember failed module imports by URL until the document closes.
+    if (attempt++ > 0) url.searchParams.set("retry", `${Date.now()}-${attempt}`);
+    promise = import(url.href).catch((error) => { promise = null; throw error; });
+    return promise;
+  };
 };
 const loadCore = retrying("simson-card-core.js");
 const loadRuntime = retrying("simson-runtime.js");
@@ -21,10 +38,32 @@ const loadRuntime = retrying("simson-runtime.js");
 // ---- window.simson -----------------------------------------------------------
 if (!window.simson) {
   let manager = null;
-  const ready = loadRuntime().then((runtime) => (manager = runtime.manager));
+  const ensureRuntime = async () => {
+    if (!manager) {
+      manager = (await loadRuntime()).manager;
+      manager.brandImage = brandImage;
+    }
+    return manager;
+  };
+  let warmTimer;
+  let warmAttempts = 0;
+  const warmRuntime = () => {
+    clearTimeout(warmTimer);
+    if (manager) return;
+    ensureRuntime().catch(() => {
+      if (warmAttempts < 3 && navigator.onLine) {
+        warmTimer = setTimeout(warmRuntime, [700, 1600, 4000][warmAttempts++]);
+      }
+    });
+  };
+  const resumeRuntime = () => {
+    if (document.visibilityState === "hidden") return;
+    warmAttempts = 0;
+    warmRuntime();
+  };
   const api = {
     version: VERSION,
-    ready,
+    get ready() { return ensureRuntime(); },
     // Subscribe to simson:incoming, simson:answered, simson:ended, simson:missed.
     on(type, handler) {
       const listener = (event) => handler(event.detail);
@@ -36,9 +75,12 @@ if (!window.simson) {
   };
   for (const name of ["call", "hangup", "answer", "decline", "configure", "mount", "registerTransport", "prepareMedia", "openDialer"]) {
     // Call straight through once loaded so a click keeps its user gesture.
-    api[name] = (...args) => (manager ? manager[name](...args) : ready.then((m) => m[name](...args)));
+    api[name] = (...args) => (manager ? manager[name](...args) : ensureRuntime().then((m) => m[name](...args)));
   }
   window.simson = api;
+  window.addEventListener("online", resumeRuntime);
+  document.addEventListener("visibilitychange", resumeRuntime);
+  warmRuntime();
 }
 
 // ---- cards ---------------------------------------------------------------------
@@ -50,11 +92,18 @@ class SimsonCard extends HTMLElement {
     this._hass = null;
     this._impl = null;
     this._retries = 0;
+    this._loading = false;
+    this._recover = () => {
+      if (document.visibilityState === "hidden" || !this.isConnected || this._impl || this.closest("[inert]")) return;
+      this._retries = 0;
+      void this._mount();
+    };
   }
 
   // Never throws: an empty config is valid because the card discovers its entities.
   setConfig(config) {
     this._config = { view: this.constructor.defaultView, ...(config || {}) };
+    if (this._config.view === "dial") this._config.view = "dialer";
     if (this._impl) this._impl.setConfig(this._config);
   }
 
@@ -70,33 +119,43 @@ class SimsonCard extends HTMLElement {
       return;
     }
     if (!this._config.view) this._config = { view: this.constructor.defaultView, ...this._config };
+    window.addEventListener("online", this._recover);
+    document.addEventListener("visibilitychange", this._recover);
     this._status("Opening Simson…");
-    this._mount();
+    void this._mount();
   }
 
-  disconnectedCallback() { clearTimeout(this._timer); }
+  disconnectedCallback() {
+    clearTimeout(this._timer);
+    window.removeEventListener("online", this._recover);
+    document.removeEventListener("visibilitychange", this._recover);
+  }
 
   async _mount() {
+    if (this._loading || this._impl) return;
+    clearTimeout(this._timer);
+    this._loading = true;
     try {
-      const { createCard } = await loadCore();
-      if (!this.isConnected || this._impl) return;
-      const impl = createCard();
+      const [{ createCard }] = await Promise.all([loadCore(), window.simson.ready]);
+      if (!this.isConnected || this.closest("[inert]")) return;
+      const impl = createCard(brandImage);
       impl.setConfig(this._config);
       if (this._hass) impl.hass = this._hass;
       this._impl = impl;
       this.shadowRoot.replaceChildren(impl);
     } catch (error) {
-      console.error("[Simson] the card could not load", error);
-      if (this._retries < 3 && this.isConnected) {
+      if (!this.isConnected) return;
+      console.warn("[Simson] Dashboard assets could not load", error);
+      if (this._retries < 3 && navigator.onLine) {
         this._timer = setTimeout(() => { this._retries += 1; this._mount(); }, [600, 1500, 3500][this._retries]);
-        this._status("Reconnecting to Simson…");
-      } else {
-        this._status("Simson could not load. Reload this page.");
       }
+      this._status("Simson could not load.", true);
+    } finally {
+      this._loading = false;
     }
   }
 
-  _status(message) {
+  _status(message, retry = false) {
     const box = document.createElement("div");
     box.setAttribute("role", "status");
     box.style.cssText = "padding:20px;min-height:72px;box-sizing:border-box;border-radius:var(--ha-card-border-radius,12px);background:var(--ha-card-background,var(--card-background-color,#fff));color:var(--primary-text-color);font:14px var(--paper-font-body1_-_font-family,system-ui)";
@@ -104,6 +163,14 @@ class SimsonCard extends HTMLElement {
     box.style.alignItems = "center";
     box.style.gap = "10px";
     box.append(brandImage(), message);
+    if (retry) {
+      const button = document.createElement("button");
+      button.type = "button";
+      button.textContent = "Retry";
+      button.style.cssText = "min-height:44px;padding:0 12px;font:inherit";
+      button.onclick = this._recover;
+      box.append(button);
+    }
     this.shadowRoot.replaceChildren(box);
   }
 
@@ -138,6 +205,8 @@ const CARDS = [
   ["simson-phones-card", "phones", "Simson phones", "mdi:phone-check-outline", "See phone registration and select a destination."],
   ["simson-live-call-card", "live", "Simson live call", "mdi:phone-outline", "See and control the call in progress."],
   ["simson-add-phone-card", "add", "Simson add phone", "mdi:phone-plus-outline", "Create a phone and see its settings once."],
+  ["simson-history-card", "history", "Simson call history", "mdi:phone-log", "See recent calls and durations."],
+  ["simson-dial-card", "dialer", "Simson dial", "mdi:dialpad", "Dial an extension for an audio or video call."],
 ];
 window.customCards = window.customCards || [];
 for (const [name, view, title, icon, description] of CARDS) {
@@ -148,10 +217,7 @@ for (const [name, view, title, icon, description] of CARDS) {
       static getStubConfig() { return { type: `custom:${name}`, view }; }
     });
   }
-  if (name !== "simson-relay-card" && !window.customCards.some((card) => card.type === name)) {
+  if (!["simson-relay-card", "simson-dial-card"].includes(name) && !window.customCards.some((card) => card.type === name)) {
     window.customCards.push({ type: name, name: title, description, preview: true });
   }
 }
-
-// Start loading the interface and the call runtime now; nothing waits for a dashboard.
-loadCore().catch(() => {});

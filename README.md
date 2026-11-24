@@ -105,9 +105,10 @@ connects them, so it needs no browser audio and asks for nothing.
 
 ## Why the card no longer shows "Configuration error"
 
-`simson-card.js` is a tiny file that defines the card elements the instant it runs,
-so Home Assistant always finds them. The interface loads in the background and
-replaces the placeholder as soon as it is ready. The files are versioned and cached.
+Simson registers its dashboard resource automatically. If you migrated from V1,
+remove the old `/simson/www/simson-card.js?v=5.9.5` entry under **Settings → Dashboards → Resources**.
+The current card interface and its assets are served from a release-specific URL.
+Cards can retry a failed load in place when the app reconnects or returns to the foreground.
 
 ## Development
 
