@@ -3,12 +3,12 @@
   "name": "Simson",
   "codeowners": ["@nitish-mp3"],
   "config_flow": true,
-  "dependencies": ["application_credentials", "http", "frontend", "my"],
+  "dependencies": ["http", "frontend", "my"],
   "after_dependencies": ["mobile_app", "lovelace"],
   "documentation": "https://github.com/architechlabs/simson-haos#readme",
   "integration_type": "hub",
   "iot_class": "cloud_polling",
   "issue_tracker": "https://github.com/architechlabs/simson-haos/issues",
   "requirements": [],
-  "version": "0.1.1"
+  "version": "0.1.2"
 }

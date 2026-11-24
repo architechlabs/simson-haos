@@ -14,7 +14,8 @@ from homeassistant.helpers.aiohttp_client import async_get_clientsession
 from homeassistant.helpers.selector import SelectOptionDict, SelectSelector, SelectSelectorConfig, SelectSelectorMode
 
 from .api import SimsonApi, SimsonError
-from .const import API_BASE, CONF_DEFAULT_EXTENSION, CONF_SCAN_ACTIVE, CONF_SCAN_IDLE, CONF_SITE_ID, CONF_SITE_NAME, CONF_TENANT_ID, CONF_TENANT_NAME, DOMAIN, SCOPES
+from .const import API_BASE, CONF_DEFAULT_EXTENSION, CONF_SCAN_ACTIVE, CONF_SCAN_IDLE, CONF_SITE_ID, CONF_SITE_NAME, CONF_TENANT_ID, CONF_TENANT_NAME, DOMAIN
+from .oauth import SimsonOAuth2Implementation
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -56,9 +57,9 @@ class SimsonFlowHandler(config_entry_oauth2_flow.AbstractOAuth2FlowHandler, doma
     def logger(self) -> logging.Logger:
         return _LOGGER
 
-    @property
-    def extra_authorize_data(self) -> dict[str, Any]:
-        return {"scope": " ".join(SCOPES)}
+    async def async_step_user(self, user_input: dict[str, Any] | None = None) -> ConfigFlowResult:
+        self.flow_impl = SimsonOAuth2Implementation(self.hass)
+        return await self.async_step_auth()
 
     @staticmethod
     @callback

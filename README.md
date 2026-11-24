@@ -23,7 +23,9 @@ Requires Home Assistant 2025.4 or newer. Integration branding in **Devices & ser
 
 1. Add [`architechlabs/simson-haos`](https://github.com/architechlabs/simson-haos) to HACS as a custom repository (type: Integration) and install **Simson**.
 2. Restart Home Assistant.
-3. **Settings → Devices & services → Add integration → Simson**, sign in, then choose the workspace and location.
+3. Open **Settings → Devices & services → Add integration → Simson**. Continue to the Simson sign-in page, approve access, then choose the workspace and location.
+
+If Home Assistant shows an **Add application credentials** form, cancel it. In HACS, update or redownload **Simson 0.1.2** (or newer), restart Home Assistant, and retry from **Add integration**. Simson uses a built-in OAuth client with PKCE.
 
 The card is added automatically. In a dashboard choose **Add card → Simson**, or use `type: custom:simson-card`.
 
