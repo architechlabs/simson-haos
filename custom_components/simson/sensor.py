@@ -7,6 +7,7 @@ from collections.abc import Callable
 from homeassistant.components.sensor import SensorEntity, SensorStateClass
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
+from homeassistant.helpers.network import NoURLAvailableError, get_url
 
 from .coordinator import SimsonConfigEntry, SimsonCoordinator
 from .entity import SimsonEntity, workspace_device
@@ -102,11 +103,15 @@ class SimsonVoiceStatus(_WorkspaceSensor):
     def extra_state_attributes(self) -> dict:
         sip = self.coordinator.data.sip or {}
         browser_sip = self.coordinator.data.browser_sip or {}
+        try:
+            https_url = get_url(self.hass, require_ssl=True)
+        except NoURLAvailableError:
+            https_url = None
         entry = self.coordinator.config_entry
         number = entry.options.get(CONF_BROWSER_EXTENSION, DEFAULT_BROWSER_EXTENSION)
         endpoint = next((ext for ext in self.coordinator.data.extensions.values()
                          if ext.extension == number and ext.enabled and not ext.gateway), None)
-        return {"simson_voice": True, "config_entry_id": entry.entry_id, "site_id": self.coordinator.site_id,
+        return {"simson_voice": True, "config_entry_id": entry.entry_id, "site_id": self.coordinator.site_id, "home_assistant_https_url": https_url,
                 "site_name": entry.data.get(CONF_SITE_NAME), "browser_extension": number, "browser_endpoint_ready": endpoint is not None,
                 "browser_video": bool(endpoint and "H264" in endpoint.codecs),
                 "browser_registration_realm": endpoint.registration_realm if endpoint else None,

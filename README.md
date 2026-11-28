@@ -34,7 +34,7 @@ The card is added automatically. In a dashboard choose **Add card → Simson pho
 
 1. In Simson, create a dedicated SIP extension **100** at the connected location. Use a distinct extension for each screen that should ring independently. To use another number, set **Home Assistant phone extension** in the integration options.
 2. Enable H.264 for that extension and the video door station if they should exchange SIP video. The location's media runtime needs its secure SIP WebSocket listener enabled.
-3. Open Home Assistant over HTTPS and add **Simson phone**. The card finds the location's realm and listener. Enter the extension's SIP password on the Connect form. The password stays in the active browser session.
+3. Open Home Assistant over HTTPS and add **Simson phone**. The card finds the location's realm and listener. When opened over HTTP, it can reopen the same dashboard at the configured Home Assistant HTTPS address. Enter the extension's SIP password on the card's Connect form. The password stays in the active browser session.
 4. Dial **100** from a SIP phone at the location to reach the connected screen. From the card, dial an extension or routing code. For an outside number, select the assigned outbound route. For gateway routes, include the browser extension in the route's permitted callers in Simson.
 
 **Video call** can receive H.264 directly from a SIP video door station with the local camera off. RTSP is only needed if you separately want to embed an RTSP-derived camera entity. A secure browser session, compatible H.264 offer, and usable media path are required.

@@ -7,7 +7,7 @@
 //  3. starts the call runtime and loads dashboard controls only when needed.
 // Everything heavy lives in simson-card-core.js (cards) and simson-runtime.js
 // (global call layer). Keep this file small and dependency free.
-const VERSION = "0.1.9";
+const VERSION = "0.1.10";
 
 function brandImage(variant = "mark") {
   const image = document.createElement("img");

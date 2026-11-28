@@ -376,6 +376,29 @@ def test_legacy_card_keeps_an_explicit_handset_relay_mode(site, page):
     assert card.get_by_label("Call from", exact=True).is_visible()
 
 
+def test_phone_setup_stays_in_home_assistant_and_preserves_dashboard_path(site, page):
+    page.add_init_script("Object.defineProperty(window, 'isSecureContext', { value: false });")
+    open_page(page, site, relay=False)
+    card = impl_ready(page)
+    page.evaluate("""() => {
+      const host = document.querySelector("simson-card");
+      const location = { simson_voice: true, config_entry_id: "office", browser_extension: "100",
+        browser_endpoint_ready: false, home_assistant_https_url: "https://home.fixture.invalid/?secret=unused" };
+      const states = marker => ({ ...window.hass.states, "sensor.office_voice": { attributes: marker } });
+      window.updateBrowserSetup = (overrides, admin) =>
+        host.hass = { ...window.hass, user: { is_admin: admin }, states: states({ ...location, ...overrides }) };
+      window.updateBrowserSetup({}, true);
+    }""")
+    assert card.get_by_role("link", name="Simson integration settings").get_attribute("href") == "/config/integrations/integration/simson"
+    assert card.get_by_role("link", name="Open this dashboard securely").get_attribute("href") == "https://home.fixture.invalid/harness.html"
+    assert card.get_by_text("waiting for an administrator", exact=False).is_visible()
+    assert card.locator("a[href*='architechlabs']").count() == 0
+    page.evaluate("window.updateBrowserSetup({browser_endpoint_ready:true, sip_realm:'voice.fixture.invalid', sip_wss_port:7443}, false)")
+    card.get_by_text("Use this dashboard’s secure address", exact=False).wait_for()
+    assert card.get_by_role("link", name="Simson integration settings").count() == 0
+    assert card.get_by_label("SIP password", exact=True).count() == 0
+
+
 def test_a_failed_download_shows_a_retry_message_not_a_configuration_error(site, page):
     page.route("**/simson-card-core.js*", lambda route: route.fulfill(status=500, body="nope"))
     page.goto(f"{site}/harness.html?cards=simson-card")

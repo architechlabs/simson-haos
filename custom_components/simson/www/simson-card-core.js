@@ -36,6 +36,7 @@ button:focus-visible,select:focus-visible,input:focus-visible{outline:3px solid 
 .empty{margin:0;padding:18px;border-radius:14px;text-align:center;color:var(--secondary-text-color);background:var(--secondary-background-color)}
 .note{margin:0;font-size:13px;color:var(--secondary-text-color)}
 .setup{display:grid;gap:8px}.setup a{justify-self:start;color:var(--primary-color);font-weight:600;padding-block:8px}
+.setup .line{font-size:12px;color:var(--secondary-text-color)}.setup .settings{display:flex;flex-wrap:wrap;gap:0 16px}
 .history{margin:0;padding:0;list-style:none}.history li{display:flex;justify-content:space-between;gap:8px;padding:10px 0;border-block-end:1px solid var(--divider-color)}
 .error,.ok{padding:10px 14px;border-radius:12px;font-size:13px}
 .error{background:color-mix(in srgb,var(--error-color,#c0392b) 14%,transparent)}.ok{background:color-mix(in srgb,var(--success-color,#2e7d32) 16%,transparent)}
@@ -54,6 +55,21 @@ const el = (tag, attrs = {}, ...children) => {
 };
 
 const inventories = new WeakMap();
+function secureDashboard(url) {
+  if (!url) return null;
+  try {
+    const origin = new URL(url);
+    if (origin.protocol !== "https:" || origin.username || origin.password) return null;
+    const current = new URL(window.location.href);
+    origin.pathname = current.pathname;
+    origin.search = "";
+    origin.hash = current.hash;
+    return origin.href;
+  } catch {
+    return null;
+  }
+}
+
 function inventory(states) {
   if (!states) return { locations: [], phones: [] };
   if (!inventories.has(states)) {
@@ -215,27 +231,35 @@ class SimsonCardImpl extends HTMLElement {
           this._renderBrowserPhone();
         } }, el("option", { value: "" }, "Choose a location"),
         locations.map((item) => el("option", { value: item.config_entry_id }, item.site_name || item.sip_realm || "Simson location")));
-        this._browserSetup("Choose the location this Home Assistant screen should call from.", select);
+        this._browserSetup("Choose the location this Home Assistant screen should call from.", { selector: select });
         return;
       }
       if (!site) {
-        this._browserSetup("Connect a Simson location in Home Assistant to set up this phone.");
+        this._browserSetup("Connect a Simson location in Home Assistant to set up this phone.", { needsSettings: true });
         return;
       }
       const extension = site.browser_extension || "100";
       const realm = site.browser_realm || site.sip_realm;
       if (!site.browser_endpoint_ready || !site.sip_wss_port || !realm) {
-        if (this._browserCard) return;
-        const requirements = [];
-        if (!site.browser_endpoint_ready) requirements.push(`Create or enable SIP extension ${extension} in this Simson location.`);
-        if (!site.sip_wss_port || !realm) requirements.push("Enable the secure SIP WebSocket listener on the Simson voice server.");
-        if (!window.isSecureContext) requirements.push("Open Home Assistant using its HTTPS address to use this screen’s microphone and video.");
-        this._browserSetup("Finish setting up this screen’s phone.", null, requirements);
+        const unassigned = !site.browser_endpoint_ready;
+        if (!unassigned && this._browserCard) return;
+        const message = unassigned
+          ? `Extension ${extension} is waiting for an administrator to assign this screen a line.`
+          : "The Simson voice service hasn’t announced a secure browser connection for this location.";
+        const href = window.isSecureContext ? null : secureDashboard(site.home_assistant_https_url);
+        this._browserSetup(message, { extension, href, needsSettings: unassigned });
         return;
       }
       config = { extension, realm, registration_realm: site.browser_registration_realm || realm,
         websocket: `wss://${realm}:${site.sip_wss_port}`,
         site_id: site.site_id, keep_connected: true, video_enabled: site.browser_video === true, title: this._config.title || "Simson phone" };
+    }
+    if (!window.isSecureContext) {
+      const href = secureDashboard(site?.home_assistant_https_url);
+      this._browserSetup(href ? "Use this dashboard’s secure address for microphone and video access." :
+        "This Home Assistant address blocks microphone and video access. An administrator needs to set an HTTPS address for this instance.",
+      { extension: config.extension, href, needsSettings: !href, networkSettings: true });
+      return;
     }
     const directory = { phones: site ? this._phones(site.config_entry_id).filter((phone) => phone.enabled && !phone.gateway && phone.number !== String(config.extension)) : [],
       routes: site && String(config.extension) === site.browser_extension ? site.outbound_routes || [] : [] };
@@ -254,18 +278,24 @@ class SimsonCardImpl extends HTMLElement {
     if (!this._browserLoading && !this._browserFailed) void this._loadBrowserPhone(config, key, directory);
   }
 
-  _browserSetup(message, action, requirements = []) {
-    const key = JSON.stringify([message, requirements, action ? [...action.options].map(option => [option.value, option.textContent]) : null]);
+  _browserSetup(message, { selector, extension, href, needsSettings = false, networkSettings = false } = {}) {
+    const admin = needsSettings && this._hass.user?.is_admin;
+    const options = selector ? [...selector.options].map(option => [option.value, option.textContent]) : null;
+    const key = JSON.stringify([message, extension, href, admin, networkSettings, options]);
     if (this._setupMessage === key && this.shadowRoot.querySelector(".setup")) return;
     this._browserCard = null;
     this._browserKey = null;
     this._browserFailed = false;
     this._setupMessage = key;
     this.shadowRoot.replaceChildren(el("style", {}, STYLE), el("ha-card", { class: "card setup" },
-      el("div", { class: "identity" }, this.brandImage?.(), el("h2", {}, this._config.title || "Simson phone")),
-      el("p", { class: "note" }, message),
-      requirements.length > 0 && el("ul", { class: "note" }, requirements.map((requirement) => el("li", {}, requirement))),
-      action || el("a", { href: "https://simson.architechlabs.in/dashboard/", target: "_blank", rel: "noopener noreferrer" }, "Open Simson dashboard")));
+      el("div", { class: "identity" }, this.brandImage?.(), el("div", {},
+        el("h2", {}, this._config.title || "Simson phone"), extension && el("span", { class: "line" }, `Extension ${extension}`))),
+      el("p", { class: "note", role: "status" }, message), selector,
+      el("div", { class: "settings" },
+        href && el("a", { href }, "Open this dashboard securely"),
+        admin && (networkSettings ?
+          el("a", { href: "/config/network" }, "Home Assistant network settings") :
+          el("a", { href: "/config/integrations/integration/simson" }, "Simson integration settings")))));
   }
 
   async _loadBrowserPhone(config, key, directory) {
