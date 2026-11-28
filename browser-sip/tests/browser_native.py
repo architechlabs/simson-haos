@@ -152,14 +152,14 @@ def main():
             first.set_viewport_size({"width": 375, "height": 720})
             first_sockets = []
             first.on("websocket", lambda websocket: first_sockets.append(websocket.url))
-            configure(first, origin, "1040", "1041", ["dialer", "contacts", "controls", "video"])
+            configure(first, origin, "1040", "100", ["dialer", "contacts", "controls", "video"])
             controls = first.locator("simson-v2-controls-card")
             dialer = first.locator("simson-v2-dialer-card")
-            dialer.get_by_label("Extension", exact=True).fill("1041")
+            dialer.get_by_label("Extension or dial code", exact=True).fill("100")
             first.get_by_role("button", name="Audio call").click()
             expect(controls.locator("#call-phase")).to_have_text("Ringing", timeout=10_000)
             first.wait_for_timeout(1_500)
-            configure(second, other_origin, "1041", "1040", ["call"])
+            configure(second, other_origin, "100", "1040", ["call"])
             expect(second.locator("#call-phase")).to_have_text("Incoming call", timeout=10_000)
             second.get_by_role("button", name="Answer", exact=True).click()
             expect_media(first, video=False)
@@ -174,7 +174,7 @@ def main():
                 return new Set(cards.map(card => card.phone)).size === 1;
             }""")
 
-            dialer.get_by_label("Extension", exact=True).fill("1041")
+            dialer.get_by_label("Extension or dial code", exact=True).fill("100")
             first.get_by_role("button", name="Audio call").click()
             expect(second.locator("#call-phase")).to_have_text("Incoming call", timeout=10_000)
             second.get_by_role("button", name="Answer", exact=True).click()
@@ -189,7 +189,7 @@ def main():
 
             if args.native_doorphone:
                 for video, label in ((False, "Audio call"), (True, "Video call")):
-                    dialer.get_by_label("Extension", exact=True).fill("1042")
+                    dialer.get_by_label("Extension or dial code", exact=True).fill("1042")
                     first.get_by_role("button", name=label, exact=True).click()
                     expect(controls.locator("#call-phase")).to_have_text("In call", timeout=10_000)
                     expect_media(first, video=video)
@@ -204,7 +204,7 @@ def main():
             second.get_by_role("button", name="End call").click()
             expect(dialer.locator("#dial")).to_be_visible()
 
-            second.get_by_label("Extension", exact=True).fill("1040")
+            second.get_by_label("Extension or dial code", exact=True).fill("1040")
             second.get_by_label("Share my camera on video calls").check()
             second.get_by_role("button", name="Video call", exact=True).click()
             expect(controls.locator("#call-phase")).to_have_text("Incoming call", timeout=10_000)
@@ -220,7 +220,7 @@ def main():
             if args.carrier_signal:
                 args.carrier_signal.touch(exist_ok=False)
                 second.wait_for_timeout(1_500)
-                configure(second, other_origin, "1041", "1040", ["call"])
+                configure(second, other_origin, "100", "1040", ["call"])
                 expect(second.locator("#call-phase")).to_have_text("Incoming call", timeout=10_000)
                 second.get_by_role("button", name="Answer", exact=True).click()
                 expect_media(second, video=False)

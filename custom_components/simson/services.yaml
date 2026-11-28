@@ -104,7 +104,7 @@ get_call_presets:
           integration: simson
 get_targets:
   name: Get Simson call targets
-  description: List enabled extensions, configured phone groups and callable presets at one location.
+  description: List enabled extensions, phone groups, presets and outbound dial codes with their permitted source extensions at one location.
   fields:
     config_entry_id:
       selector:

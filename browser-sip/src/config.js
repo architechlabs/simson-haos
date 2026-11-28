@@ -18,8 +18,8 @@ export function extension(value) {
   return result;
 }
 
-const routePattern = /^(?:[1-9][0-9]{1,7}|\*[0-9]{2,13})$/;
-const gatewayPrefixPattern = /^(?:[0-9]{1,4}|\*[0-9]{1,3})$/;
+const routePattern = /^(?:[1-9][0-9]{1,7}|\*[0-9]{2,23})$/;
+const gatewayPrefixPattern = /^(?:[0-9]{1,4}|\*[0-9]{1,3}|\*86[0-9]{4})$/;
 const outsidePattern = /^(?:\+[1-9][0-9]{3,14}|[0-9]{4,17})$/;
 const dialModes = new Set(["auto", "extension", "route", "outside"]);
 
@@ -36,8 +36,21 @@ export function dialDestination(value, mode = "auto", gatewayPrefix = "") {
   return dial;
 }
 
+export function outboundRoutes(items = [], legacyPrefix = "") {
+  if (!Array.isArray(items) || items.length > 160) throw new Error("Invalid outbound routes.");
+  const routes = new Map();
+  for (const item of items) {
+    if (!item || typeof item.prefix !== "string" || !gatewayPrefixPattern.test(item.prefix)) {
+      throw new Error("Use an outbound dial code configured in Simson.");
+    }
+    routes.set(item.prefix, Object.freeze({ prefix: item.prefix, name: label(item.name, item.prefix) }));
+  }
+  if (legacyPrefix && !routes.has(legacyPrefix)) routes.set(legacyPrefix, { prefix: legacyPrefix, name: "Carrier" });
+  return [...routes.values()];
+}
+
 export function sipDestination(value) {
-  if (typeof value !== "string" || !/^(?:[1-9][0-9]{1,7}|\*[0-9]{2,13}|(?:[0-9]{1,4}|\*[0-9]{1,3})(?:\+[1-9][0-9]{3,14}|[0-9]{4,17}))$/.test(value)) {
+  if (typeof value !== "string" || !/^(?:[1-9][0-9]{1,7}|\*[0-9]{2,23}|(?:[0-9]{1,4}|\*[0-9]{1,3}|\*86[0-9]{4})(?:\+[1-9][0-9]{3,14}|[0-9]{4,17}))$/.test(value)) {
     throw new Error("Enter a valid SIP dial string.");
   }
   return value;
@@ -72,6 +85,11 @@ export function readConfig(config, defaultTitle = "Simson calls") {
     throw new Error("The WebSocket must use WSS and match the configured SIP realm.");
   }
   const local = extension(config.extension);
+  const registrationRealm = config.registration_realm ?? config.realm;
+  if (registrationRealm !== config.realm && (typeof registrationRealm !== "string" ||
+      !/^s-[a-z0-9]{3,10}\.vipsy\.in$/.test(registrationRealm))) {
+    throw new Error("Use the location’s assigned SIP registration realm.");
+  }
   if (config.keep_connected !== undefined && typeof config.keep_connected !== "boolean") throw new Error("Keep connected must be true or false.");
   const siteId = config.site_id ?? "";
   if (typeof siteId !== "string" || siteId && !sitePattern.test(siteId)) throw new Error("Use the Simson location ID.");
@@ -84,6 +102,8 @@ export function readConfig(config, defaultTitle = "Simson calls") {
   if (gatewayPrefix !== "" && (typeof gatewayPrefix !== "string" || !gatewayPrefixPattern.test(gatewayPrefix))) {
     throw new Error("Use the carrier access prefix configured in Simson.");
   }
+  if (config.video_enabled !== undefined && typeof config.video_enabled !== "boolean") throw new Error("Video availability must be true or false.");
+  const routes = outboundRoutes(config.outbound_routes, gatewayPrefix);
   const contacts = config.contacts ?? [];
   if (!Array.isArray(contacts) || contacts.length > 64) throw new Error("Add up to 64 contacts.");
   const seen = new Set([local]);
@@ -98,6 +118,7 @@ export function readConfig(config, defaultTitle = "Simson calls") {
   });
   return Object.freeze({
     realm: config.realm,
+    registrationRealm,
     websocket: websocket.href,
     extension: local,
     keepConnected: config.keep_connected === true,
@@ -107,6 +128,8 @@ export function readConfig(config, defaultTitle = "Simson calls") {
     mediaPeer: config.media_extension === undefined ? "" : extension(config.media_extension),
     relay,
     gatewayPrefix,
+    routes: Object.freeze(routes),
+    videoEnabled: config.video_enabled !== false,
     title: label(config.title, defaultTitle),
     contacts: Object.freeze(directory),
   });

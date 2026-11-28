@@ -134,6 +134,7 @@ async def async_register_services(hass: HomeAssistant) -> None:
                             "online": item.online, "video": "H264" in item.codecs}
                            for item in data.extensions.values() if item.enabled and not item.gateway],
             "nodes": [{"id": node_id, "name": name} for node_id, name in data.nodes.items()],
+            "outbound_routes": data.outbound_routes,
             "presets": [{"id": item.id, "name": item.name, "node_id": item.node_id}
                         for item in data.automations.values() if item.enabled],
         }

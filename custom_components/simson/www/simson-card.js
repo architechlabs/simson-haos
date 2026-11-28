@@ -7,7 +7,7 @@
 //  3. starts the call runtime and loads dashboard controls only when needed.
 // Everything heavy lives in simson-card-core.js (cards) and simson-runtime.js
 // (global call layer). Keep this file small and dependency free.
-const VERSION = "0.1.7";
+const VERSION = "0.1.8";
 
 function brandImage(variant = "mark") {
   const image = document.createElement("img");
@@ -102,7 +102,7 @@ class SimsonCard extends HTMLElement {
 
   // Never throws: an empty config is valid because the card discovers its entities.
   setConfig(config) {
-    this._config = { view: this.constructor.defaultView, ...(config || {}) };
+    this._config = { view: this.constructor.defaultView, ...(this.constructor.defaultMode && { mode: this.constructor.defaultMode }), ...(config || {}) };
     if (this._config.view === "dial") this._config.view = "dialer";
     if (this._impl) this._impl.setConfig(this._config);
   }
@@ -199,13 +199,15 @@ class SimsonCard extends HTMLElement {
 
 // One card for everything, plus focused cards that can be placed anywhere.
 const CARDS = [
-  ["simson-card", "combined", "Simson", "mdi:phone-in-talk-outline", "Ring phones or use a configured browser extension."],
-  ["simson-relay-card", "combined", "Simson (compatibility)", "mdi:phone-in-talk-outline", "Ring phones or use a configured browser extension."],
+  ["simson-card", "combined", "Simson phone", "mdi:phone-in-talk-outline", "Make and answer calls on this Home Assistant screen."],
+  ["simson-relay-card", "combined", "Simson handset relay", "mdi:phone-in-talk-outline", "Connect two physical phones."],
   ["simson-dialer-card", "dialer", "Simson dialer", "mdi:dialpad", "Dial an extension for an audio or video call."],
   ["simson-phones-card", "phones", "Simson phones", "mdi:phone-check-outline", "See phone registration and select a destination."],
   ["simson-live-call-card", "live", "Simson live call", "mdi:phone-outline", "See and control the call in progress."],
   ["simson-add-phone-card", "add", "Simson phone setup", "mdi:phone-outline", "Manage SIP extensions in the Simson portal."],
   ["simson-browser-phone-card", "browser", "Simson browser phone", "mdi:headset", "Talk and answer on this device over WebRTC."],
+  ["simson-phone-controls-card", "controls", "Simson phone controls", "mdi:phone-incoming-outline", "Answer, mute and end calls on this Home Assistant screen."],
+  ["simson-video-card", "video", "Simson call video", "mdi:video-outline", "Watch the SIP video feed from a door station or another phone."],
   ["simson-history-card", "history", "Simson call history", "mdi:phone-log", "See recent calls and durations."],
   ["simson-dial-card", "dialer", "Simson dial", "mdi:dialpad", "Dial an extension for an audio or video call."],
 ];
@@ -214,6 +216,7 @@ for (const [name, view, title, icon, description] of CARDS) {
   if (!customElements.get(name)) {
     customElements.define(name, class extends SimsonCard {
       static defaultView = view;
+      static defaultMode = name === "simson-relay-card" ? "relay" : undefined;
       static metadata = { icon, description };
       static getStubConfig() { return { type: `custom:${name}`, view }; }
     });

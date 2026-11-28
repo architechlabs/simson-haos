@@ -19,7 +19,7 @@ function loadPhone() {
 export function preparePhone() { void loadPhone().catch(() => {}); }
 
 function keyFor(config) {
-  return JSON.stringify([location.origin, config.realm, config.extension]);
+  return JSON.stringify([location.origin, config.registrationRealm ?? config.realm, config.extension]);
 }
 
 export function joinSession(config, view, listener) {
@@ -65,17 +65,23 @@ class SessionGroup {
     clearTimeout(this.releaseTimer);
     this.releaseTimer = setTimeout(() => {
       if (this.listeners.size) return;
-      if (this.keepConnected && (this.phone || this.connectAttempt)) {
-        if (this.snapshot.call && this.snapshot.call.phase !== "incoming") void this.phone?.end();
-        return;
-      }
+      if (this.keepConnected && (this.phone || this.connectAttempt)) return;
       this.disconnect();
       this.remove();
     }, 350);
   }
 
   publish(snapshot = this.snapshot) {
+    const previous = this.snapshot;
     this.snapshot = snapshot;
+    if (previous.connection !== snapshot.connection || previous.call?.phase !== snapshot.call?.phase ||
+        previous.call?.muted !== snapshot.call?.muted) {
+      globalThis.window?.dispatchEvent(new CustomEvent("simson:browser_call", { detail: Object.freeze({
+        extension: this.config.extension, site_id: this.config.siteId || null,
+        connection: snapshot.connection, phase: snapshot.call?.phase ?? null,
+        video: snapshot.call?.video === true, muted: snapshot.call?.muted === true,
+      }) }));
+    }
     this.setRinging(snapshot.call?.phase === "incoming");
     const participants = [...this.listeners];
     const primary = participants.find(([, participant]) => participant.view === "controls") ??

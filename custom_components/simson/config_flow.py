@@ -14,7 +14,10 @@ from homeassistant.helpers.aiohttp_client import async_get_clientsession
 from homeassistant.helpers.selector import SelectOptionDict, SelectSelector, SelectSelectorConfig, SelectSelectorMode
 
 from .api import SimsonApi, SimsonError
-from .const import API_BASE, CONF_DEFAULT_EXTENSION, CONF_SCAN_ACTIVE, CONF_SCAN_IDLE, CONF_SITE_ID, CONF_SITE_NAME, CONF_TENANT_ID, CONF_TENANT_NAME, DOMAIN
+from .const import (
+    API_BASE, CONF_BROWSER_EXTENSION, CONF_DEFAULT_EXTENSION, CONF_SCAN_ACTIVE, CONF_SCAN_IDLE,
+    CONF_SITE_ID, CONF_SITE_NAME, CONF_TENANT_ID, CONF_TENANT_NAME, DEFAULT_BROWSER_EXTENSION, DOMAIN,
+)
 from .oauth import SimsonOAuth2Implementation
 
 _LOGGER = logging.getLogger(__name__)
@@ -33,6 +36,8 @@ class SimsonOptionsFlow(OptionsFlow):
             return self.async_create_entry(data=cleaned)
         current = self.config_entry.options
         schema = vol.Schema({
+            vol.Required(CONF_BROWSER_EXTENSION, default=current.get(CONF_BROWSER_EXTENSION, DEFAULT_BROWSER_EXTENSION)):
+                vol.All(str, vol.Match(r"^[1-9][0-9]{1,7}$")),
             vol.Optional(CONF_DEFAULT_EXTENSION, description={"suggested_value": current.get(CONF_DEFAULT_EXTENSION)}): str,
             vol.Optional(CONF_SCAN_IDLE, default=current.get(CONF_SCAN_IDLE, 30)): vol.All(vol.Coerce(int), vol.Range(min=10, max=600)),
             vol.Optional(CONF_SCAN_ACTIVE, default=current.get(CONF_SCAN_ACTIVE, 4)): vol.All(vol.Coerce(int), vol.Range(min=2, max=60)),

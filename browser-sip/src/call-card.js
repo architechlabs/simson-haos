@@ -1,4 +1,4 @@
-import { dialDestination, readConfig } from "./config.js";
+import { dialDestination, outboundRoutes, readConfig } from "./config.js";
 import { idleSnapshot, joinSession, preparePhone } from "./session.js";
 import styles from "./call-card.css";
 
@@ -19,6 +19,7 @@ template.innerHTML = `
       <div class="pickup" id="pickup" role="status" hidden><ha-icon icon="mdi:phone-incoming-outline" aria-hidden="true"></ha-icon><div><strong id="pickup-title"></strong><p id="pickup-detail"></p></div></div>
       <p class="hint" id="idle-view" hidden></p>
       <form id="login">
+        <p class="hint" id="registration-hint"></p>
         <label>SIP password<input id="password" type="password" required maxlength="256" autocomplete="off"></label>
         <details id="relay-settings" hidden>
           <summary>Network relay</summary>
@@ -30,11 +31,11 @@ template.innerHTML = `
       </form>
       <form id="dial" hidden>
         <div class="dial-fields">
-          <label>Call type<select id="dial-mode">
-            <option value="auto">Auto</option><option value="extension">SIP phone</option>
-            <option value="route">Node or route</option><option id="outside-mode" value="outside">Outside</option>
+          <label>Call through<select id="dial-mode">
+            <option value="auto">Simson extension or dial code</option><option id="outside-mode" value="outside">Outside number</option>
           </select></label>
-          <label><span id="dial-label">Extension or route</span><input id="number" inputmode="tel" maxlength="18" required autocomplete="off" placeholder="e.g. 201"></label>
+          <label id="route-choice" hidden>Outbound route<select id="outbound-route"></select></label>
+          <label class="destination"><span id="dial-label">Extension or dial code</span><input id="number" inputmode="tel" maxlength="18" required autocomplete="off" list="destinations" placeholder="e.g. 1002"><datalist id="destinations"></datalist></label>
         </div>
         <div class="actions">
           <button class="primary" type="submit"><ha-icon icon="mdi:phone"></ha-icon>Audio call</button>
@@ -123,6 +124,34 @@ class SimsonCallCard extends HTMLElement {
     if (changed) this.watchPickup();
   }
 
+  set directoryData(value) {
+    const fingerprint = JSON.stringify(value);
+    if (fingerprint === this.directoryFingerprint) return;
+    this.directoryFingerprint = fingerprint;
+    this.discovered = value;
+    this.renderDirectory();
+  }
+
+  renderDirectory() {
+    if (!this.config) return;
+    const phones = (this.discovered?.phones || []).filter((phone) => /^[1-9][0-9]{1,7}$/.test(phone.number));
+    const options = phones.map((phone) => {
+      const option = new Option(phone.name || phone.number, phone.number);
+      if (phone.video) option.label += " · Video";
+      return option;
+    });
+    this.el.destinations.replaceChildren(...options);
+    const selection = this.el["outbound-route"].value;
+    const routes = outboundRoutes([...(this.discovered?.routes ?? []), ...this.config.routes]);
+    const providers = routes.map((route) => new Option(`${route.name} · ${route.prefix}`, route.prefix));
+    if (providers.length > 1) providers.unshift(new Option("Choose a route", ""));
+    this.el["outbound-route"].replaceChildren(...providers);
+    if (routes.some((route) => route.prefix === selection)) this.el["outbound-route"].value = selection;
+    this.el["outside-mode"].disabled = routes.length === 0;
+    if (this.el["dial-mode"].value === "outside" && !routes.length) this.el["dial-mode"].value = "auto";
+    this.renderDialMode();
+  }
+
   get phone() { return this.binding?.group.phone; }
 
   addKeypad() {
@@ -163,14 +192,13 @@ class SimsonCallCard extends HTMLElement {
     this.updateNotificationLink();
     this.el.title.textContent = config.title;
     this.el.identity.textContent = `Extension ${config.extension}`;
+    this.el["registration-hint"].textContent = `Dial ${config.extension} from another Simson phone to reach this screen while it is connected.`;
     this.el["card-preview"].hidden = true;
     this.el["live-controls"].hidden = false;
     this.el.state.hidden = false;
     this.el["contacts-title"].hidden = this.constructor.view === "contacts";
     this.el["relay-settings"].hidden = !config.relay;
-    this.el["outside-mode"].disabled = !config.gatewayPrefix;
-    if (this.el["dial-mode"].value === "outside" && !config.gatewayPrefix) this.el["dial-mode"].value = "auto";
-    this.renderDialMode();
+    this.renderDirectory();
     const cards = config.contacts.map((contact) => {
       const button = document.createElement("button");
       button.type = "button";
@@ -340,22 +368,35 @@ class SimsonCallCard extends HTMLElement {
   renderDialMode() {
     const mode = this.el["dial-mode"].value;
     const [label, placeholder] = {
-      auto: ["Extension or route", "e.g. 201"],
+      auto: ["Extension or dial code", "e.g. 1002"],
       extension: ["SIP extension", "e.g. 201"],
       route: ["Configured dial code", "e.g. *81"],
       outside: ["Phone number", "Include country code if needed"],
     }[mode];
     this.el["dial-label"].textContent = label;
     this.el.number.placeholder = placeholder;
-    this.el.video.hidden = mode === "outside";
+    this.el["route-choice"].hidden = mode !== "outside";
+    this.el["outbound-route"].required = mode === "outside";
+    if (mode === "outside") this.el.number.removeAttribute("list");
+    else this.el.number.setAttribute("list", "destinations");
+    this.el.video.hidden = mode === "outside" || this.config?.videoEnabled === false;
+    this.renderCameraChoice();
+  }
+
+  renderCameraChoice() {
+    const view = this.constructor.view;
+    this.el["camera-choice"].hidden = this.snapshot.connection !== "ready" || !!this.snapshot.call ||
+      this.el["dial-mode"].value === "outside" || this.config?.videoEnabled === false ||
+      !(view === "combined" || view === "dialer" || view === "contacts" && this.viewAccess.primary);
   }
 
   async call(video, destination = this.el.number.value.trim(), contact = false) {
     try {
       if (!this.phone) return;
       const mode = this.el["dial-mode"].value;
-      const number = contact ? destination : dialDestination(destination, mode, this.config.gatewayPrefix);
-      await this.phone.dial(number, video && (contact || mode !== "outside"), this.binding.group.shareCamera);
+      const number = contact ? destination : dialDestination(destination, mode, this.el["outbound-route"].value);
+      if (number === this.config.extension) throw new Error("Choose a different extension to call.");
+      await this.phone.dial(number, video && this.config.videoEnabled && (contact || mode !== "outside"), this.binding.group.shareCamera);
     } catch (error) {
       this.binding?.group.report(error instanceof Error ? error.message : "Could not start the call.");
     }
@@ -386,6 +427,7 @@ class SimsonCallCard extends HTMLElement {
     const view = this.constructor.view;
     const { primary, media, shareCamera } = access;
     const ready = connection === "ready";
+    const secure = window.isSecureContext && Boolean(navigator.mediaDevices?.getUserMedia);
     const incoming = call?.phase === "incoming";
     const active = call?.phase === "active";
     this.el.state.textContent = connectionLabels[connection];
@@ -394,9 +436,13 @@ class SimsonCallCard extends HTMLElement {
     this.el.notice.hidden = !primary || !(message || notification);
     this.el.notice.textContent = primary ? message || notification : "";
     this.el.login.hidden = !primary || connection !== "offline";
+    this.el.login.querySelector("button[type=submit]").disabled = !secure;
+    this.el["registration-hint"].textContent = secure ?
+      `Dial ${this.config?.extension} from another Simson phone to reach this screen while it is connected.` :
+      "Open Home Assistant over HTTPS to use this screen’s microphone and camera.";
     this.el.dial.hidden = !ready || !!call || !["combined", "dialer"].includes(view);
     this.el.camera.checked = shareCamera;
-    this.el["camera-choice"].hidden = !ready || !!call || !(view === "combined" || view === "dialer" || view === "contacts" && primary);
+    this.renderCameraChoice();
     this.el.directory.hidden = !ready || !!call || view !== "contacts" && (view !== "combined" || this.config?.contacts.length === 0);
     this.el.disconnect.hidden = !primary || connection === "offline" || !!call;
     this.el["call-meta"].hidden = !call || !primary && !media;

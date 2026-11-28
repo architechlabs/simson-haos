@@ -1,4 +1,4 @@
-import{d}from"./chunk.js";var s=document.createElement("template");s.innerHTML=`
+import{e as d}from"./chunk.js";var s=document.createElement("template");s.innerHTML=`
   <style>
     :host { display: block; color: var(--primary-text-color); }
     .brand-lockup { display: inline-flex; padding: 8px 10px; margin-block-end: 12px; border-radius: 8px; background: #f6f5f1; }
@@ -26,8 +26,8 @@ import{d}from"./chunk.js";var s=document.createElement("template");s.innerHTML=`
     <label>Card title<input name="title" maxlength="80" autocomplete="off" placeholder="Optional"></label>
     <label>SIP realm<input name="realm" required autocomplete="off" autocapitalize="none" placeholder="office.sip.example.net"></label>
     <label>SIP WebSocket<input name="websocket" required autocomplete="off" autocapitalize="none" placeholder="wss://office.sip.example.net:7443"></label>
-    <label>SIP extension<input name="extension" required inputmode="numeric" pattern="[1-9][0-9]{1,7}" autocomplete="off" placeholder="203"></label>
-    <label>Carrier access prefix<input name="gateway_prefix" maxlength="4" inputmode="tel" autocomplete="off" placeholder="Optional, e.g. *9"></label>
+    <label>This screen\u2019s SIP extension<input name="extension" required inputmode="numeric" pattern="[1-9][0-9]{1,7}" autocomplete="off" placeholder="100"></label>
+    <label>Carrier access prefix<input name="gateway_prefix" maxlength="7" inputmode="tel" autocomplete="off" placeholder="Optional, e.g. *859"></label>
     <label>TURN relay<input name="relay" autocomplete="off" autocapitalize="none" placeholder="Optional"></label>
     <label>Simson location ID<input name="site_id" maxlength="36" autocomplete="off" placeholder="Optional for notification links"></label>
     <div>

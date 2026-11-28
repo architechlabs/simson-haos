@@ -13,7 +13,7 @@ cloud directly.
 | **Phones** | A `Registered` sensor for every SIP phone and gateway, grouped under one device per location. |
 | **Calls** | `simson.call` rings two phones and connects them. Audio goes phone to phone over the voice service, so there is no browser handshake to wait for. |
 | **Events** | An event entity fires `incoming`, `answered`, `ended` and `missed`. The same events go on the bus as `simson_call_event`. |
-| **Dashboard card** | `Simson` rings physical phones. `Simson browser phone` supports direct microphone and video calls on this device. |
+| **Dashboard card** | The Simson phone has its own extension for incoming and outgoing audio or video on this screen. |
 | **Blueprint** | Push a notification on incoming and missed calls. |
 
 ## Install
@@ -28,33 +28,38 @@ If Home Assistant shows an **Add application credentials** form, cancel it. In H
 
 If a linked location shows **Failed to set up** with a listener error on 0.1.2, update or redownload **Simson 0.1.3** (or newer) in HACS and restart Home Assistant. The existing location will be loaded with its saved sign-in.
 
-The card is added automatically. In a dashboard choose **Add card → Simson**, or use `type: custom:simson-card`.
+The card is added automatically. In a dashboard choose **Add card → Simson phone**, or use `type: custom:simson-card`.
 
 ## Talk from the dashboard
 
-The Simson card includes the browser phone. Use Home Assistant over HTTPS and a dedicated, existing browser SIP extension
-with a matching SIP realm and WSS address. Enter its SIP password through
-the card's **Connect** form. Card configuration stores only connection details.
+1. In Simson, create a dedicated SIP extension **100** at the connected location. Use a distinct extension for each screen that should ring independently. To use another number, set **Home Assistant phone extension** in the integration options.
+2. Enable H.264 for that extension and the video door station if they should exchange SIP video. The location's media runtime needs its secure SIP WebSocket listener enabled.
+3. Open Home Assistant over HTTPS and add **Simson phone**. The card finds the location's realm and listener. Enter the extension's SIP password on the Connect form. The password stays in the active browser session.
+4. Dial **100** from a SIP phone at the location to reach the connected screen. From the card, dial an extension or routing code. For an outside number, select the assigned outbound route. For gateway routes, include the browser extension in the route's permitted callers in Simson.
+
+**Video call** can receive H.264 directly from a SIP video door station with the local camera off. RTSP is only needed if you separately want to embed an RTSP-derived camera entity. A secure browser session, compatible H.264 offer, and usable media path are required.
+
+The dialer, phone controls, and call video cards share the same browser extension in one tab. Use `custom:simson-dialer-card`, `custom:simson-phone-controls-card`, and `custom:simson-video-card` to lay them out independently. With several linked locations, select a location or set the same `config_entry_id` on the cards that should share a session. To keep a physical-phone relay on a dashboard, use `custom:simson-relay-card`.
+
+Use a manual profile for a custom listener or contact list.
 
 ```yaml
 type: custom:simson-browser-phone-card
 browser:
   realm: office.sip.example.net
   websocket: wss://office.sip.example.net:7443
-  extension: "203"
-  gateway_prefix: "*9"
+  extension: "100"
+  outbound_routes:
+    - {name: Office gateway, prefix: "*809"}
+    - {name: WhatsApp Business, prefix: "*833"}
   keep_connected: true
   contacts:
     - {name: Front door, extension: "202", video: true}
     - {name: Reception group, extension: "*81", mode: route}
 ```
 
-Remove the example carrier prefix unless it matches the outbound route configured
-in Simson for this extension. **SIP phone** calls an extension, **Node or route**
-dials a route code configured in Simson, and **Outside** uses the configured
-carrier prefix. The media server enforces routing, caller permissions and allowed
-numbers. Separate browser layouts are available for dialing, contacts, controls,
-video, and a local camera or media player. Install the optional [Simson V2 component](browser-sip/INSTALL.md)
+Use the actual dial codes configured in Simson for your extension. The media server enforces routing, caller permissions and allowed
+numbers. Install the optional [Simson V2 component](browser-sip/INSTALL.md)
 for Companion notifications and site entities. Its phone assignment is under
 **Settings → Devices & services → Simson V2 → Configure**.
 
@@ -68,7 +73,11 @@ data:
 ```
 
 That action rings the source handset and connects it to the destination.
-`simson.get_targets` lists extensions, groups and saved presets for scripts.
+`simson.get_targets` lists extensions, groups, saved presets and outbound dial codes with their permitted source extensions.
+Per-extension registration sensors expose the device and node IDs, supported codecs, video capability and last observation time.
+Location sensors also expose registered extension count, outbound route count, and workspace call totals and duration.
+Custom frontend cards can subscribe to the `simson:browser_call` window event.
+It provides the extension, site ID, connection state, call phase, video and mute state.
 Provision, enable, and reset extensions from the Simson portal.
 
 ## Permissions
@@ -85,12 +94,9 @@ The connection shows these scopes on the consent screen:
 
 Home Assistant acts as you: it can never do more than your Simson role allows.
 
-## Build your own: the call layer
+## Build your own: handset relay controls
 
-The calling experience does not live in a card. A small runtime is loaded on every
-Home Assistant page, so a call rings, can be ended and shows its state on whatever
-dashboard, panel or custom page you are looking at. Cards, scripts and your own
-dashboards only trigger it.
+A small runtime loaded on Home Assistant pages lets scripts and custom dashboards start handset relay calls and observe workspace call events. The browser phone has a separate SIP session and reports its state through the `simson:browser_call` event.
 
 ```js
 window.simson.call("1201", "1202");                 // place a call

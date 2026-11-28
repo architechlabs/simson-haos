@@ -1,4 +1,4 @@
-:host { display: block; color: var(--primary-text-color, #1c1e21); font: inherit; }
+:host { display: block; color: var(--primary-text-color, #1c1e21); font-family: var(--paper-font-body1_-_font-family, system-ui, sans-serif); }
 * { box-sizing: border-box; }
 [hidden] { display: none !important; }
 ha-card { display: block; overflow: clip; background: var(--card-background-color, #fff); }
@@ -12,7 +12,8 @@ header h2 { font: inherit; font-size: 18px; font-weight: 650; line-height: 1.25;
 header p, .hint { color: var(--secondary-text-color, #535a60); margin: 0; font-size: 13px; line-height: 1.5; }
 .state { display: inline-flex; align-items: center; flex: none; gap: 6px; min-height: 26px; padding-inline: 8px; border-radius: 6px; background: color-mix(in srgb, currentColor 8%, transparent); color: var(--secondary-text-color, #535a60); font-size: 12px; }
 .state::before { content: ""; width: 6px; height: 6px; border-radius: 50%; background: currentColor; }
-.state[data-ready="true"] { color: var(--success-color, #287d45); }
+.state[data-ready="true"] { color: var(--primary-text-color); background: color-mix(in srgb, var(--success-color, #287d45) 18%, transparent); }
+.state[data-ready="true"]::before { background: var(--success-color, #287d45); }
 section { display: grid; gap: 14px; }
 form { margin: 0; display: grid; gap: 12px; }
 label, legend { font-size: 13px; font-weight: 550; }
@@ -24,7 +25,7 @@ button.primary { color: var(--text-primary-color, white); background: var(--prim
 button.danger { border-color: var(--error-color, #b42318); color: var(--error-color, #b42318); }
 button:hover:not(:disabled) { filter: brightness(.92); }
 button:disabled { opacity: .55; cursor: default; }
-button:focus-visible, input:focus-visible, summary:focus-visible { outline: 2px solid var(--primary-color, #174cc2); outline-offset: 2px; }
+button:focus-visible, input:focus-visible, select:focus-visible, summary:focus-visible { outline: 2px solid var(--primary-color, #174cc2); outline-offset: 2px; }
 .actions { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; }
 .choice { display: inline-flex; align-items: center; gap: 8px; min-height: 40px; justify-self: start; }
 .notice { font-size: 13px; margin: 0; color: var(--secondary-text-color, #535a60); line-height: 1.45; }
@@ -53,7 +54,12 @@ details summary { cursor: pointer; padding: 9px 0; font-size: 13px; }
 @media (max-width: 440px) {
   header, section { padding: 13px; }
   .actions .primary { flex: 1 1 auto; }
+  #dial .dial-fields { grid-template-columns: minmax(0, 1fr); }
 }
 
 .dial-fields { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 140px), 1fr)); gap: 8px; }
 .dial-fields select { box-sizing: border-box; width: 100%; min-height: 44px; padding: 0 10px; border: 1px solid var(--divider-color); border-radius: 8px; background: var(--card-background-color); color: var(--primary-text-color); font: inherit; }
+.destination { grid-column: 1 / -1; }
+.destination input { font-size: 20px; font-variant-numeric: tabular-nums; }
+#dial .actions > button { flex: 1 1 120px; }
+#disconnect { justify-self: start; border-color: transparent; }

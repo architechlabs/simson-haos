@@ -84,7 +84,7 @@ export class BrowserPhone {
   }
 
   async connect(password) {
-    const uri = UserAgent.makeURI(`sip:${this.config.extension}@${this.config.realm}`);
+    const uri = UserAgent.makeURI(`sip:${this.config.extension}@${this.config.registrationRealm}`);
     const rawPassword = String(password);
     if (rawPassword.length < 8 || rawPassword.length > 256 || /[\u0000-\u001f\u007f]/.test(rawPassword)) {
       throw new Error("Enter the SIP password for this extension.");
@@ -214,7 +214,7 @@ export class BrowserPhone {
     const destination = sipDestination(number);
     if (destination === this.config.extension) throw new Error("Choose a different extension.");
     if (video && !browserHasH264()) throw new Error("This browser does not offer H.264 video. Try an audio call.");
-    const target = UserAgent.makeURI(`sip:${destination}@${this.config.realm}`);
+    const target = UserAgent.makeURI(`sip:${destination}@${this.config.registrationRealm}`);
     const options = mediaOptions(video, video && camera);
     const session = new Inviter(this.ua, target, { sessionDescriptionHandlerOptions: options });
     const call = this.bind(session, "dialing", destination, video, options);

@@ -5,7 +5,6 @@ import http.server
 import pathlib
 import re
 import threading
-import time
 
 import pytest
 
@@ -49,10 +48,11 @@ HARNESS = """<!doctype html><meta charset=utf-8><body>
     const params = new URLSearchParams(location.search);
     for (const tag of (params.get("cards") || "").split(",").filter(Boolean)) {
       const card = document.createElement(tag);
-      card.setConfig({});
+      card.setConfig(params.get("relay") === "1" ? { mode: "relay" } : {});
       document.body.append(card);
       card.hass = window.hass;
     }
+    window.initialCardText = document.querySelector("simson-card")?.shadowRoot.textContent;
     window.ready = true;
   });
 </script>"""
@@ -70,7 +70,6 @@ navigator.mediaDevices.getUserMedia = async (constraints) => {
 
 
 class Handler(http.server.SimpleHTTPRequestHandler):
-    delay = 0.0
     extensions_map = {**http.server.SimpleHTTPRequestHandler.extensions_map, ".js": "text/javascript"}
 
     def do_GET(self):
@@ -82,8 +81,6 @@ class Handler(http.server.SimpleHTTPRequestHandler):
             self.end_headers()
             self.wfile.write(body)
             return
-        if "simson-card-core.js" in self.path and type(self).delay:
-            time.sleep(type(self).delay)
         super().do_GET()
 
     def log_message(self, *args):
@@ -92,7 +89,6 @@ class Handler(http.server.SimpleHTTPRequestHandler):
 
 @pytest.fixture
 def site():
-    Handler.delay = 0
     server = http.server.ThreadingHTTPServer(("127.0.0.1", 0), functools.partial(Handler, directory=str(WWW)))
     threading.Thread(target=server.serve_forever, daemon=True).start()
     yield f"http://127.0.0.1:{server.server_address[1]}"
@@ -113,14 +109,14 @@ def page():
         browser.close()
 
 
-def open_page(page, url, cards="simson-card"):
-    page.goto(f"{url}/harness.html?cards={cards}")
+def open_page(page, url, cards="simson-card", *, relay=True):
+    page.goto(f"{url}/harness.html?cards={cards}&relay={int(relay)}")
     page.wait_for_function("window.ready === true")
     page.wait_for_function("window.__subs && window.__subs.simson_call_event")
 
 
 def impl_ready(page, tag="simson-card"):
-    page.wait_for_function("(tag) => { const host = document.querySelector(tag); return host && host.shadowRoot.querySelector('simson-card-impl'); }", arg=tag)
+    page.wait_for_function("(tag) => { const host = document.querySelector(tag); return host && host.shadowRoot.querySelector('simson-card-impl'); }", arg=tag, polling=50)
     return page.locator(f"{tag} >> simson-card-impl")
 
 
@@ -132,12 +128,11 @@ def overlay(page):
     return page.locator("simson-call-view")
 
 
-def test_every_card_is_defined_immediately_even_when_the_interface_is_slow(site, page):
-    Handler.delay = 1.5
-    page.goto(f"{site}/harness.html?cards=simson-card")
+def test_every_card_is_defined_immediately_before_the_interface_loads(site, page):
+    page.goto(f"{site}/harness.html?cards=simson-card&relay=1")
     page.wait_for_function("window.ready === true")
     assert page.evaluate("window.definedAtLoad") is True, "the card elements must exist as soon as the entry script runs"
-    assert "Opening Simson" in page.locator("simson-card").evaluate("(host) => host.shadowRoot.textContent")
+    assert "Opening Simson" in page.evaluate("window.initialCardText")
     impl_ready(page)
     assert "Kitchen" in page.locator("simson-card").evaluate("(host) => host.shadowRoot.querySelector('simson-card-impl').shadowRoot.textContent")
     assert not page.errors, page.errors
@@ -158,11 +153,11 @@ def test_picker_previews_have_branding_without_mounting_the_call_interface(site,
       }
       return types;
     }""")
-    assert len(visible_cards) == 6
-    assert page.locator(".simson-preview").count() == 6
+    assert len(visible_cards) == 8
+    assert page.locator(".simson-preview").count() == 8
     assert page.locator("simson-card-impl").count() == 0
-    assert page.get_by_alt_text("Simson by Architech Labs").count() == 6
-    assert len(set(page.locator(".simson-preview ha-icon").evaluate_all("icons => icons.map(icon => icon.getAttribute('icon'))"))) == 6
+    assert page.get_by_alt_text("Simson by Architech Labs").count() == 8
+    assert len(set(page.locator(".simson-preview ha-icon").evaluate_all("icons => icons.map(icon => icon.getAttribute('icon'))"))) == 8
     assert page.evaluate("window.calls.length") == 0
     assert page.evaluate("window.media.requests.length") == 0
     assert not page.errors, page.errors
@@ -185,7 +180,7 @@ def test_module_failures_recover_on_mobile_without_reloading(site, page):
 
     page.route("**/simson-card-core.js*", handle("core"))
     page.route("**/simson-runtime.js*", handle("runtime"))
-    page.goto(f"{site}/harness.html?cards=simson-card")
+    page.goto(f"{site}/harness.html?cards=simson-card&relay=1")
     retry = page.get_by_role("button", name="Retry")
     retry.wait_for()
     # Allow the scheduled retry to recover without requiring a tap or a reload.
@@ -301,7 +296,7 @@ def test_focused_cards_render_only_their_part(site, page):
     dialer = impl_ready(page, "simson-dialer-card")
     phones = impl_ready(page, "simson-phones-card")
     assert dialer.get_by_label("Extension to call").count() == 1 and dialer.locator(".phone").count() == 0
-    assert phones.locator(".phone").count() == 3 and phones.get_by_label("Extension to call").count() == 0
+    assert phones.locator(".phone").count() == 2 and phones.get_by_label("Extension to call").count() == 0
 
 
 def test_service_errors_are_shown_to_the_user(site, page):
@@ -348,6 +343,32 @@ def test_browser_phone_embeds_existing_transport_and_preserves_it_on_ha_updates(
     assert page.evaluate("window.calls") == []
 
 
+def test_default_card_discovers_its_own_extension_and_never_rings_a_source_handset(site, page):
+    page.set_viewport_size({"width": 320, "height": 720})
+    open_page(page, site, relay=False)
+    card = impl_ready(page)
+    card.get_by_text("Connect a Simson location", exact=False).wait_for()
+    page.evaluate("""() => {
+      const host = document.querySelector("simson-card");
+      const attributes = { simson_voice: true, config_entry_id: "office", site_name: "Office",
+        browser_extension: "100", browser_endpoint_ready: true, browser_video: true,
+        sip_realm: "sip.example.net", sip_wss_port: 7443, outbound_routes: [{ name: "WhatsApp Business", prefix: "*833" }] };
+      const states = { ...window.hass.states, "sensor.office_voice": { attributes } };
+      states["binary_sensor.kitchen"] = { ...states["binary_sensor.kitchen"], attributes: {
+        ...states["binary_sensor.kitchen"].attributes, config_entry_id: "office", video: true } };
+      host.hass = { ...window.hass, states };
+    }""")
+    phone = card.locator("simson-v2-call-card")
+    phone.get_by_text("Extension 100", exact=True).wait_for()
+    assert phone.get_by_text("Dial 100 from another Simson phone", exact=False).is_visible()
+    assert phone.evaluate("(card) => card.config.websocket") == "wss://sip.example.net:7443/"
+    assert phone.locator("#destinations option").evaluate_all("options => options.map(option => option.value)") == ["1201"]
+    assert phone.locator("#outbound-route option").evaluate_all("options => options.map(option => option.value)") == ["*833"]
+    assert phone.get_by_label("Ring this phone first").count() == 0
+    assert page.evaluate("window.calls.length") == 0
+    assert not page.errors, page.errors
+
+
 def test_a_failed_download_shows_a_retry_message_not_a_configuration_error(site, page):
     page.route("**/simson-card-core.js*", lambda route: route.fulfill(status=500, body="nope"))
     page.goto(f"{site}/harness.html?cards=simson-card")
@@ -387,7 +408,8 @@ def test_live_browser_dialer_sends_only_same_realm_route_and_outside_invites(sit
         page.evaluate("""() => {
             const card = document.createElement("simson-browser-phone-card");
             card.setConfig({ browser: { realm: "voice.fixture.invalid", websocket: "wss://voice.fixture.invalid:7443",
-                extension: "1201", gateway_prefix: "*9" } });
+                extension: "100", outbound_routes: [{name: "Gateway", prefix: "*809"},
+                  {name: "WhatsApp", prefix: "*833"}, {name: "Airtel", prefix: "*869250"}] } });
             document.body.append(card);
             card.hass = window.hass;
         }""")
@@ -395,17 +417,20 @@ def test_live_browser_dialer_sends_only_same_realm_route_and_outside_invites(sit
         card.get_by_label("SIP password").fill("fixture-password")
         card.get_by_role("button", name="Connect", exact=True).click()
         card.get_by_text("Ready", exact=True).wait_for(timeout=6000)
-        for mode, label, number in [
-            ("extension", "SIP extension", "1202"),
-            ("route", "Configured dial code", "*81"),
-            ("outside", "Phone number", "+15551234567"),
+        for mode, label, number, route in [
+            ("auto", "Extension or dial code", "1202", None),
+            ("auto", "Extension or dial code", "*81", None),
+            ("outside", "Phone number", "+15551234567", "*833"),
+            ("outside", "Phone number", "09123456789", "*869250"),
         ]:
-            card.get_by_label("Call type").select_option(mode)
+            card.get_by_label("Call through").select_option(mode)
             card.get_by_label(label, exact=True).fill(number)
-            if mode == "outside":
+            if route:
+                card.get_by_label("Outbound route").select_option(route)
                 assert not card.get_by_role("button", name="Video call").is_visible()
             card.get_by_role("button", name="Audio call").click()
             card.locator("#dial").wait_for(state="visible", timeout=6000)
-        assert invites == [f"sip:1202@{realms}", f"sip:*81@{realms}", f"sip:*9+15551234567@{realms}"]
+        assert invites == [f"sip:1202@{realms}", f"sip:*81@{realms}",
+                           f"sip:*833+15551234567@{realms}", f"sip:*86925009123456789@{realms}"]
         assert page.evaluate("window.calls") == []
         browser.close()

@@ -51,6 +51,12 @@ test("routes local dial codes and prefixed outside calls without accepting injec
   assert.equal(dialDestination("201", "extension"), "201");
   assert.equal(dialDestination("*81", "route"), "*81");
   assert.equal(sipDestination(dialDestination("+15551234567", "outside", "*9")), "*9+15551234567");
+  assert.equal(sipDestination(dialDestination("+919123456789", "outside", "*869250")), "*869250+919123456789");
+  assert.equal(readConfig({ ...config, registration_realm: "s-pin.vipsy.in" }).registrationRealm, "s-pin.vipsy.in");
+  assert.throws(() => readConfig({ ...config, registration_realm: "different.example.test" }));
+  assert.deepEqual(readConfig({ ...config, outbound_routes: [
+    { prefix: "*833", name: "WhatsApp" }, { prefix: "*859", name: "Airtel" },
+  ] }).routes.map(({prefix}) => prefix), ["*833", "*859"]);
   assert.equal(sipDestination(dialDestination("00915551234567", "outside", "9")), "900915551234567");
   for (const text of ["+15551234567", "201@example.test", "201;user=phone", "201?x=y", "201\r\n", "#100"]) {
     assert.throws(() => sipDestination(text));

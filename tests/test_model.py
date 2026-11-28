@@ -6,6 +6,28 @@ model = pure("model")
 NOW = datetime(2026, 11, 20, 12, 0, tzinfo=timezone.utc)
 
 
+def test_browser_outbound_directory_preserves_source_entitlements():
+    extensions = {
+        "browser": model.Extension("browser", "Screen", "100", "office", True, 1, 1, False, True),
+        "desk": model.Extension("desk", "Desk", "1002", "lobby", True, 1, 1, False, True),
+        "trunk": model.Extension("trunk", "WhatsApp", "1190", "office", True, 1, 1, True, True),
+    }
+    snapshot = {"nodes": [{"id": "office"}, {"id": "lobby"}], "gateway_route_sets": [{"node_id": "office", "routes": [
+        {"id": "whatsapp", "enabled": True, "gateway_endpoint_id": "trunk",
+         "outbound": {"access_prefix": "*833", "source_ids": ["browser", "trunk"]}},
+        {"id": "disabled", "enabled": False, "gateway_endpoint_id": "trunk",
+         "outbound": {"access_prefix": "*834", "source_ids": ["desk"]}},
+    ]}], "route_sets": [{"node_id": "lobby", "routes": [{"code": "*869250"}]}]}
+    numbers = model.parse_numbers([
+        {"id": "airtel", "number": "+911244699250", "airtel": {"gateway_configured": True, "access_code": "*869250"}},
+        {"id": "unused", "number": "+911244699251", "airtel": {"gateway_configured": False, "access_code": "*869251"}},
+    ])
+    assert model.outbound_routes(snapshot, extensions, numbers) == [
+        {"id": "airtel", "name": "Airtel · 9250", "prefix": "*869250", "extensions": ["100"]},
+        {"id": "whatsapp", "name": "WhatsApp", "prefix": "*833", "extensions": ["100"]},
+    ]
+
+
 def call(call_id="c1", phase="ringing", connected=None, ended=None, seconds=0, started=None):
     return model.CallInfo(call_id, phase, 1, started or NOW.isoformat(), connected, ended, seconds)
 

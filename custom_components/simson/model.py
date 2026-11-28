@@ -22,6 +22,7 @@ class Extension:
     online: bool | None  # None when presence is not observed
     codecs: tuple[str, ...] = ("PCMU", "PCMA")
     observed_at: str | None = None  # when presence last saw it
+    registration_realm: str | None = None
 
 
 @dataclass(frozen=True)
@@ -44,6 +45,7 @@ class CarrierNumber:
     id: str
     number: str
     source: str
+    airtel_access_code: str | None = None
 
 
 @dataclass(frozen=True)
@@ -85,11 +87,43 @@ class Workspace:
     presence_state: str = "unknown"
     media_node_id: str | None = None
     sip: dict[str, Any] | None = None  # server, port, transport, realm: what a phone registers to
+    browser_sip: dict[str, Any] | None = None
     calls: dict[str, CallInfo] = field(default_factory=dict)
     summary: Summary = field(default_factory=Summary)
     active_calls: int = 0
     total_calls: int = 0
     answered_calls: int = 0
+    outbound_routes: list[dict[str, Any]] = field(default_factory=list)
+
+
+def outbound_routes(snapshot: dict, extensions: dict[str, Extension], numbers: list[CarrierNumber]) -> list[dict[str, Any]]:
+    """Project the outbound policies that already authorize physical and browser SIP calls."""
+    enabled_nodes = {node["id"] for node in snapshot.get("nodes", []) if node.get("desired_enabled", True)}
+    phones = {key: ext for key, ext in extensions.items() if ext.enabled and not ext.gateway and ext.node_id in enabled_nodes}
+    routes = []
+    for group in snapshot.get("gateway_route_sets", []):
+        for route in group.get("routes", []):
+            outbound = route.get("outbound")
+            gateway = extensions.get(route.get("gateway_endpoint_id"))
+            if not route.get("enabled") or not outbound or not gateway or not gateway.gateway or not gateway.enabled:
+                continue
+            sources = [phones[key].extension for key in outbound.get("source_ids", []) if key in phones]
+            if sources:
+                routes.append({"id": route["id"], "name": gateway.name, "prefix": outbound["access_prefix"], "extensions": sources})
+    for number in numbers:
+        code = number.airtel_access_code
+        if not code:
+            continue
+        blocked = {group.get("node_id") for group in snapshot.get("route_sets", [])
+                   if any(route.get("code") == code for route in group.get("routes", []))}
+        blocked.update(group.get("node_id") for group in snapshot.get("gateway_route_sets", [])
+                       if any(route.get("enabled") and (outbound := route.get("outbound"))
+                              and outbound.get("access_prefix") and code.startswith(outbound["access_prefix"])
+                              for route in group.get("routes", [])))
+        sources = [ext.extension for ext in phones.values() if ext.node_id not in blocked]
+        if sources:
+            routes.append({"id": number.id, "name": f"Airtel · {number.number[-4:]}", "prefix": code, "extensions": sources})
+    return sorted(routes, key=lambda route: (route["name"].casefold(), route["prefix"], route["id"]))
 
 
 def build_extensions(snapshot: dict[str, Any], presence: dict[str, Any]) -> dict[str, Extension]:
@@ -112,6 +146,7 @@ def build_extensions(snapshot: dict[str, Any], presence: dict[str, Any]) -> dict
             online=True if state == "online" else False if state == "offline" else None,
             codecs=tuple(item.get("codecs") or ("PCMU", "PCMA")),
             observed_at=observed.get("observed_at"),
+            registration_realm=observed.get("registration_realm"),
         )
     return result
 
@@ -137,7 +172,12 @@ def parse_automations(payloads: list[dict[str, Any]]) -> dict[str, Automation]:
 
 
 def parse_numbers(items: list[dict[str, Any]]) -> list[CarrierNumber]:
-    return [CarrierNumber(id=item["id"], number=item["number"], source=item.get("source", "")) for item in items]
+    result = []
+    for item in items:
+        airtel = item.get("airtel") or {}
+        code = airtel.get("access_code") if airtel.get("gateway_configured") else None
+        result.append(CarrierNumber(id=item["id"], number=item["number"], source=item.get("source", ""), airtel_access_code=code))
+    return result
 
 
 def parse_runtime(presence: dict[str, Any]) -> tuple[str | None, dict[str, Any] | None]:
@@ -148,6 +188,16 @@ def parse_runtime(presence: dict[str, Any]) -> tuple[str | None, dict[str, Any] 
         return None, None
     chosen = runtimes[0]
     return chosen.get("id"), chosen.get("sip_connection")
+
+
+def parse_browser_listener(presence: dict[str, Any]) -> dict[str, Any] | None:
+    for runtime in presence.get("media_runtimes", []):
+        if runtime.get("enabled") and runtime.get("configuration_state") == "applied":
+            listener = runtime.get("sip_connection") or {}
+            port = listener.get("wss_port")
+            if type(port) is int and 1024 <= port <= 65535 and listener.get("realm"):
+                return {"realm": listener["realm"], "port": port}
+    return None
 
 
 def parse_calls(dashboard: dict[str, Any]) -> dict[str, CallInfo]:
