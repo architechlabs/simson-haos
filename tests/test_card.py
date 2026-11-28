@@ -343,13 +343,14 @@ def test_browser_phone_embeds_existing_transport_and_preserves_it_on_ha_updates(
     assert page.evaluate("window.calls") == []
 
 
-def test_default_card_discovers_its_own_extension_and_never_rings_a_source_handset(site, page):
+@pytest.mark.parametrize("tag", ["simson-card", "simson-relay-card"])
+def test_default_card_discovers_its_own_extension_and_never_rings_a_source_handset(site, page, tag):
     page.set_viewport_size({"width": 320, "height": 720})
-    open_page(page, site, relay=False)
-    card = impl_ready(page)
+    open_page(page, site, cards=tag, relay=False)
+    card = impl_ready(page, tag)
     card.get_by_text("Connect a Simson location", exact=False).wait_for()
-    page.evaluate("""() => {
-      const host = document.querySelector("simson-card");
+    page.evaluate("""(tag) => {
+      const host = document.querySelector(tag);
       const attributes = { simson_voice: true, config_entry_id: "office", site_name: "Office",
         browser_extension: "100", browser_endpoint_ready: true, browser_video: true,
         sip_realm: "sip.example.net", sip_wss_port: 7443, outbound_routes: [{ name: "WhatsApp Business", prefix: "*833" }] };
@@ -357,16 +358,22 @@ def test_default_card_discovers_its_own_extension_and_never_rings_a_source_hands
       states["binary_sensor.kitchen"] = { ...states["binary_sensor.kitchen"], attributes: {
         ...states["binary_sensor.kitchen"].attributes, config_entry_id: "office", video: true } };
       host.hass = { ...window.hass, states };
-    }""")
+    }""", tag)
     phone = card.locator("simson-v2-call-card")
     phone.get_by_text("Extension 100", exact=True).wait_for()
     assert phone.get_by_text("Dial 100 from another Simson phone", exact=False).is_visible()
     assert phone.evaluate("(card) => card.config.websocket") == "wss://sip.example.net:7443/"
     assert phone.locator("#destinations option").evaluate_all("options => options.map(option => option.value)") == ["1201"]
     assert phone.locator("#outbound-route option").evaluate_all("options => options.map(option => option.value)") == ["*833"]
-    assert phone.get_by_label("Ring this phone first").count() == 0
+    assert card.get_by_label("Call from", exact=True).count() == 0
     assert page.evaluate("window.calls.length") == 0
     assert not page.errors, page.errors
+
+
+def test_legacy_card_keeps_an_explicit_handset_relay_mode(site, page):
+    open_page(page, site, cards="simson-relay-card", relay=True)
+    card = impl_ready(page, "simson-relay-card")
+    assert card.get_by_label("Call from", exact=True).is_visible()
 
 
 def test_a_failed_download_shows_a_retry_message_not_a_configuration_error(site, page):

@@ -226,9 +226,11 @@ class SimsonCardImpl extends HTMLElement {
       const realm = site.browser_realm || site.sip_realm;
       if (!site.browser_endpoint_ready || !site.sip_wss_port || !realm) {
         if (this._browserCard) return;
-        this._browserSetup(!site.browser_endpoint_ready ?
-          `Create a dedicated SIP extension ${extension} in this location, then connect it here with its SIP password.` :
-          "Ask your Simson administrator to enable secure browser calling for this location.");
+        const requirements = [];
+        if (!site.browser_endpoint_ready) requirements.push(`Create or enable SIP extension ${extension} in this Simson location.`);
+        if (!site.sip_wss_port || !realm) requirements.push("Enable the secure SIP WebSocket listener on the Simson voice server.");
+        if (!window.isSecureContext) requirements.push("Open Home Assistant using its HTTPS address to use this screen’s microphone and video.");
+        this._browserSetup("Finish setting up this screen’s phone.", null, requirements);
         return;
       }
       config = { extension, realm, registration_realm: site.browser_registration_realm || realm,
@@ -252,15 +254,18 @@ class SimsonCardImpl extends HTMLElement {
     if (!this._browserLoading && !this._browserFailed) void this._loadBrowserPhone(config, key, directory);
   }
 
-  _browserSetup(message, action) {
-    if (this._setupMessage === message && this.shadowRoot.querySelector(".setup")) return;
+  _browserSetup(message, action, requirements = []) {
+    const key = JSON.stringify([message, requirements, action ? [...action.options].map(option => [option.value, option.textContent]) : null]);
+    if (this._setupMessage === key && this.shadowRoot.querySelector(".setup")) return;
     this._browserCard = null;
     this._browserKey = null;
     this._browserFailed = false;
-    this._setupMessage = message;
+    this._setupMessage = key;
     this.shadowRoot.replaceChildren(el("style", {}, STYLE), el("ha-card", { class: "card setup" },
       el("div", { class: "identity" }, this.brandImage?.(), el("h2", {}, this._config.title || "Simson phone")),
-      el("p", { class: "note" }, message), action || el("a", { href: "https://simson.architechlabs.in/dashboard/", target: "_blank", rel: "noopener noreferrer" }, "Open Simson dashboard")));
+      el("p", { class: "note" }, message),
+      requirements.length > 0 && el("ul", { class: "note" }, requirements.map((requirement) => el("li", {}, requirement))),
+      action || el("a", { href: "https://simson.architechlabs.in/dashboard/", target: "_blank", rel: "noopener noreferrer" }, "Open Simson dashboard")));
   }
 
   async _loadBrowserPhone(config, key, directory) {

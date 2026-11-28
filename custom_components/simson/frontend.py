@@ -13,7 +13,7 @@ from .const import DOMAIN
 
 _LOGGER = logging.getLogger(__name__)
 
-CARD_VERSION = "0.1.8"
+CARD_VERSION = "0.1.9"
 CARD_PATH = "/simson/www"
 RELEASE_PATH = f"{CARD_PATH}/v{CARD_VERSION}"
 CARD_URL = f"{RELEASE_PATH}/simson-card.js"

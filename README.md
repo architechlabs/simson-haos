@@ -39,7 +39,7 @@ The card is added automatically. In a dashboard choose **Add card → Simson pho
 
 **Video call** can receive H.264 directly from a SIP video door station with the local camera off. RTSP is only needed if you separately want to embed an RTSP-derived camera entity. A secure browser session, compatible H.264 offer, and usable media path are required.
 
-The dialer, phone controls, and call video cards share the same browser extension in one tab. Use `custom:simson-dialer-card`, `custom:simson-phone-controls-card`, and `custom:simson-video-card` to lay them out independently. With several linked locations, select a location or set the same `config_entry_id` on the cards that should share a session. To keep a physical-phone relay on a dashboard, use `custom:simson-relay-card`.
+The dialer, phone controls, and call video cards share the same browser extension in one tab. Use `custom:simson-dialer-card`, `custom:simson-phone-controls-card`, and `custom:simson-video-card` to lay them out independently. With several linked locations, select a location or set the same `config_entry_id` on the cards that should share a session. Saved `custom:simson-relay-card` entries now open the browser phone too. Set `mode: relay` on a card to keep the physical-phone relay.
 
 Use a manual profile for a custom listener or contact list.
 
